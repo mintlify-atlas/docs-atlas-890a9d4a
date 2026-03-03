@@ -1,0 +1,646 @@
+---
+title: Server
+description: FastAPI-based HTTP server for workflow management and API endpoints
+---
+
+## Overview
+
+The server component provides a FastAPI-based HTTP interface for managing workflows, handling authentication, processing events, and exposing application functionality through REST APIs.
+
+<Note>
+  The SDK includes `APIServer`, a complete FastAPI implementation that handles workflow triggers, authentication, metadata operations, and event processing.
+</Note>
+
+## ServerInterface
+
+The base interface that all server implementations must follow.
+
+```python
+from abc import ABC, abstractmethod
+from typing import Optional
+from application_sdk.handlers import HandlerInterface
+
+class ServerInterface(ABC):
+    """Abstract base class for API servers."""
+    
+    handler: Optional[HandlerInterface]
+    
+    def __init__(self, handler: Optional[HandlerInterface] = None):
+        self.handler = handler
+    
+    @abstractmethod
+    async def start(self) -> None:
+        """Start the server."""
+        raise NotImplementedError("start method not implemented")
+```
+
+## APIServer
+
+The `APIServer` class provides a complete FastAPI-based server implementation with built-in support for workflow management, authentication, and event handling.
+
+```python
+from application_sdk.server.fastapi import APIServer
+from application_sdk.clients.workflow import WorkflowClient
+from my_app.handlers import MyHandler
+
+server = APIServer(
+    handler=MyHandler(),
+    workflow_client=workflow_client,
+    ui_enabled=True,
+    has_configmap=True
+)
+```
+
+### Constructor Parameters
+
+<ParamField path="lifespan" type="Callable">
+  Optional lifespan manager for the FastAPI application. Used for startup/shutdown hooks.
+  
+  ```python
+  from contextlib import asynccontextmanager
+  
+  @asynccontextmanager
+  async def lifespan(app: FastAPI):
+      # Startup
+      print("Server starting")
+      yield
+      # Shutdown
+      print("Server stopping")
+  
+  server = APIServer(lifespan=lifespan)
+  ```
+</ParamField>
+
+<ParamField path="handler" type="HandlerInterface">
+  Handler instance for processing application-specific operations like authentication, preflight checks, and metadata fetching.
+</ParamField>
+
+<ParamField path="workflow_client" type="WorkflowClient">
+  Client for interacting with Temporal workflows. Required for workflow operations.
+</ParamField>
+
+<ParamField path="frontend_templates_path" type="str" default="frontend/templates">
+  Path to frontend template files for the UI.
+</ParamField>
+
+<ParamField path="ui_enabled" type="bool" default="True">
+  Whether to enable the UI frontend routes.
+</ParamField>
+
+<ParamField path="has_configmap" type="bool" default="False">
+  Whether the application has a configuration map for the UI.
+</ParamField>
+
+<ParamField path="subscriptions" type="List[Subscription]" default="[]">
+  List of Dapr pub/sub subscriptions for event-driven workflows.
+</ParamField>
+
+## Core API Endpoints
+
+The server automatically registers several API endpoints:
+
+### Workflow Endpoints (`/workflows/v1`)
+
+<Accordion title="POST /workflows/v1/auth">
+  Test authentication credentials.
+  
+  **Request:**
+  ```json
+  {
+    "api_key": "your-api-key",
+    "base_url": "https://api.example.com"
+  }
+  ```
+  
+  **Response:**
+  ```json
+  {
+    "success": true,
+    "message": "Authentication successful"
+  }
+  ```
+  
+  Calls `handler.test_auth()`
+</Accordion>
+
+<Accordion title="POST /workflows/v1/metadata">
+  Fetch metadata from the source system.
+  
+  **Request:**
+  ```json
+  {
+    "type": "databases",
+    "database": "production",
+    "credentials": {...}
+  }
+  ```
+  
+  **Response:**
+  ```json
+  {
+    "success": true,
+    "data": {
+      "databases": [...],
+      "tables": [...]
+    }
+  }
+  ```
+  
+  Calls `handler.fetch_metadata()`
+</Accordion>
+
+<Accordion title="POST /workflows/v1/check">
+  Perform preflight validation checks.
+  
+  **Request:**
+  ```json
+  {
+    "credentials": {...},
+    "metadata": {...}
+  }
+  ```
+  
+  **Response:**
+  ```json
+  {
+    "success": true,
+    "data": {
+      "connection_check": {
+        "success": true,
+        "message": "Connection successful"
+      },
+      "permissions_check": {
+        "success": true,
+        "message": "Permissions validated"
+      }
+    }
+  }
+  ```
+  
+  Calls `handler.preflight_check()`
+</Accordion>
+
+<Accordion title="POST /workflows/v1/start">
+  Start a new workflow execution.
+  
+  **Request:**
+  ```json
+  {
+    "workflow_id": "my-workflow-123",
+    "metadata": {...}
+  }
+  ```
+  
+  **Response:**
+  ```json
+  {
+    "success": true,
+    "message": "Workflow started successfully",
+    "data": {
+      "workflow_id": "my-workflow-123",
+      "run_id": "abc-def-123"
+    }
+  }
+  ```
+</Accordion>
+
+<Accordion title="GET /workflows/v1/status/{workflow_id}/{run_id}">
+  Get the status of a workflow run.
+  
+  **Response:**
+  ```json
+  {
+    "success": true,
+    "message": "Workflow status fetched successfully",
+    "data": {
+      "status": "RUNNING",
+      "startTime": "2024-01-15T10:30:00Z",
+      "lastUpdated": "2024-01-15T10:35:00Z"
+    }
+  }
+  ```
+</Accordion>
+
+<Accordion title="POST /workflows/v1/stop/{workflow_id}/{run_id}">
+  Stop a running workflow.
+  
+  **Response:**
+  ```json
+  {
+    "success": true
+  }
+  ```
+</Accordion>
+
+<Accordion title="GET /workflows/v1/config/{config_id}">
+  Retrieve workflow configuration.
+  
+  **Response:**
+  ```json
+  {
+    "success": true,
+    "message": "Workflow configuration fetched successfully",
+    "data": {...}
+  }
+  ```
+</Accordion>
+
+<Accordion title="POST /workflows/v1/config/{config_id}">
+  Update workflow configuration.
+  
+  **Request:**
+  ```json
+  {
+    "config": {...}
+  }
+  ```
+  
+  **Response:**
+  ```json
+  {
+    "success": true,
+    "message": "Workflow configuration updated successfully",
+    "data": {...}
+  }
+  ```
+</Accordion>
+
+<Accordion title="POST /workflows/v1/file">
+  Upload a file to object storage.
+  
+  **Form Data:**
+  - `file`: File to upload
+  - `filename`: Original filename
+  - `prefix`: Storage prefix (default: "workflow_file_upload")
+  - `contentType`: File content type
+  
+  **Response:**
+  ```json
+  {
+    "success": true,
+    "key": "workflow_file_upload/2024/01/15/file.csv",
+    "url": "https://storage/..." 
+  }
+  ```
+</Accordion>
+
+<Accordion title="GET /workflows/v1/configmap/{config_map_id}">
+  Get a configuration map.
+  
+  **Response:**
+  ```json
+  {
+    "success": true,
+    "message": "Configuration map fetched successfully",
+    "data": {...}
+  }
+  ```
+  
+  Calls `handler.get_configmap()`
+</Accordion>
+
+### Event Endpoints (`/events/v1`)
+
+<Accordion title="POST /events/v1/event/{event_id}">
+  Trigger a workflow from an event.
+  
+  **Request:**
+  ```json
+  {
+    "event_type": "ENTITY_UPDATE",
+    "event_name": "asset_updated",
+    "data": {...}
+  }
+  ```
+  
+  **Response:**
+  ```json
+  {
+    "success": true,
+    "message": "Workflow started successfully",
+    "status": "SUCCESS",
+    "data": {
+      "workflow_id": "...",
+      "run_id": "..."
+    }
+  }
+  ```
+</Accordion>
+
+<Accordion title="POST /events/v1/drop">
+  Drop events that don't match filters.
+  
+  **Response:**
+  ```json
+  {
+    "success": false,
+    "message": "Event didn't match any of the filters",
+    "status": "DROP"
+  }
+  ```
+</Accordion>
+
+### Dapr Endpoints (`/dapr`)
+
+<Accordion title="GET /dapr/subscribe">
+  Get Dapr pub/sub subscription configuration.
+  
+  **Response:**
+  ```json
+  [
+    {
+      "pubsubname": "eventstore",
+      "topic": "ENTITY_UPDATE",
+      "routes": {
+        "rules": [
+          {
+            "match": "event.data.event_name == 'asset_updated'",
+            "path": "/events/v1/event/asset_update_trigger"
+          }
+        ],
+        "default": "/events/v1/drop"
+      }
+    }
+  ]
+  ```
+</Accordion>
+
+### Other Endpoints
+
+<Accordion title="GET /observability">
+  Launch DuckDB UI for log exploration.
+  
+  Redirects to `http://0.0.0.0:4213`
+</Accordion>
+
+<Accordion title="GET /">
+  Serve the application UI (if `ui_enabled=True`).
+</Accordion>
+
+## Registering Workflows
+
+Register workflows with the server using different trigger types.
+
+### HTTP Trigger
+
+Register a workflow that is triggered via HTTP POST:
+
+```python
+from application_sdk.server.fastapi import APIServer, HttpWorkflowTrigger
+from my_app.workflows import MyWorkflow
+
+server.register_workflow(
+    workflow_class=MyWorkflow,
+    triggers=[HttpWorkflowTrigger()]
+)
+```
+
+This creates a `POST /workflows/v1/start` endpoint.
+
+### Event Trigger
+
+Register a workflow that is triggered by events:
+
+```python
+from application_sdk.server.fastapi import APIServer, EventWorkflowTrigger
+from my_app.workflows import AssetUpdateWorkflow
+
+event_trigger = EventWorkflowTrigger(
+    event_type="ENTITY_UPDATE",
+    event_name="asset_updated",
+    event_id="asset_update_handler",
+    event_filters=[
+        {
+            "path": "event.data.typeName",
+            "operator": "==",
+            "value": "Table"
+        }
+    ]
+)
+
+server.register_workflow(
+    workflow_class=AssetUpdateWorkflow,
+    triggers=[event_trigger]
+)
+```
+
+### Multiple Triggers
+
+A workflow can have multiple triggers:
+
+```python
+server.register_workflow(
+    workflow_class=MyWorkflow,
+    triggers=[
+        HttpWorkflowTrigger(),
+        EventWorkflowTrigger(
+            event_type="ENTITY_CREATE",
+            event_name="asset_created",
+            event_id="asset_create_handler"
+        )
+    ]
+)
+```
+
+## Starting the Server
+
+```python
+await server.start(
+    host="0.0.0.0",
+    port=8000,
+    root_path=""
+)
+```
+
+<ParamField path="host" type="str" default="0.0.0.0">
+  Host address to bind to. Use `0.0.0.0` to accept connections from any network interface.
+</ParamField>
+
+<ParamField path="port" type="int" default="8000">
+  Port to listen on. Configurable via `APP_PORT` environment variable.
+</ParamField>
+
+<ParamField path="root_path" type="str" default="">
+  ASGI root path passed to uvicorn. Used when the app is behind a proxy with a path prefix.
+  
+  Example: If your app is served at `https://example.com/api/my-app`, set `root_path="/api/my-app"`
+</ParamField>
+
+## Middleware
+
+The server automatically includes middleware for:
+
+### LogMiddleware
+
+Logs all incoming requests and responses with timing information.
+
+```
+INFO: POST /workflows/v1/start - 200 OK - 1.234s
+```
+
+### MetricsMiddleware
+
+Collects metrics for:
+- Request counts by endpoint and status code
+- Request duration histograms
+- Active request gauges
+
+## Documentation
+
+The server can automatically generate and serve Atlan documentation:
+
+```python
+server.docs_directory_path = "docs"
+server.docs_export_path = "dist"
+```
+
+Documentation is served at `/atlandocs`
+
+## Custom Subscriptions
+
+Register custom Dapr pub/sub subscriptions:
+
+```python
+from application_sdk.server.fastapi.models import Subscription
+
+async def handle_custom_event(data: dict):
+    print(f"Received event: {data}")
+    return {"status": "processed"}
+
+subscription = Subscription(
+    component_name="pubsub",
+    topic="custom-topic",
+    route="custom-handler",
+    handler=handle_custom_event
+)
+
+server = APIServer(
+    handler=handler,
+    workflow_client=client,
+    subscriptions=[subscription]
+)
+```
+
+## Complete Server Example
+
+```python
+import asyncio
+from application_sdk.server.fastapi import APIServer, HttpWorkflowTrigger
+from application_sdk.clients.workflow import WorkflowClient
+from my_app.workflows import DataPipelineWorkflow
+from my_app.handlers import DataHandler
+from my_app.clients import DataClient
+
+async def main():
+    # Initialize workflow client
+    workflow_client = WorkflowClient(application_name="data-pipeline")
+    await workflow_client.load()
+    
+    # Initialize handler with client
+    handler = DataHandler(client=DataClient())
+    
+    # Create server
+    server = APIServer(
+        handler=handler,
+        workflow_client=workflow_client,
+        ui_enabled=True,
+        has_configmap=True
+    )
+    
+    # Register workflows
+    server.register_workflow(
+        workflow_class=DataPipelineWorkflow,
+        triggers=[HttpWorkflowTrigger()]
+    )
+    
+    # Start server
+    await server.start(
+        host="0.0.0.0",
+        port=8000
+    )
+
+if __name__ == "__main__":
+    asyncio.run(main())
+```
+
+## Instance Attributes
+
+| Attribute | Type | Description |
+|-----------|------|-------------|
+| `app` | `FastAPI` | The FastAPI application instance |
+| `workflow_client` | `Optional[WorkflowClient]` | Client for Temporal operations |
+| `handler` | `Optional[HandlerInterface]` | Handler for business logic |
+| `workflow_router` | `APIRouter` | Router for workflow endpoints |
+| `dapr_router` | `APIRouter` | Router for Dapr pub/sub |
+| `events_router` | `APIRouter` | Router for event handling |
+| `ui_enabled` | `bool` | Whether UI routes are enabled |
+| `has_configmap` | `bool` | Whether configmap is available |
+| `workflows` | `List[WorkflowInterface]` | Registered workflows |
+| `event_triggers` | `List[EventWorkflowTrigger]` | Event-based triggers |
+
+## Environment Variables
+
+The server respects these environment variables:
+
+| Variable | Description | Default |
+|----------|-------------|----------|
+| `APP_HOST` | Server host address | `0.0.0.0` |
+| `APP_PORT` | Server port | `8000` |
+| `APP_TENANT_ID` | Tenant identifier | - |
+| `WORKFLOW_UI_HOST` | Workflow UI host | - |
+| `WORKFLOW_UI_PORT` | Workflow UI port | - |
+
+## Best Practices
+
+<Accordion title="Use Environment-Based Configuration">
+  Configure the server using environment variables for different environments.
+  
+  ```python
+  import os
+  
+  server = APIServer(
+      handler=handler,
+      ui_enabled=os.getenv("UI_ENABLED", "true").lower() == "true",
+      has_configmap=os.getenv("HAS_CONFIGMAP", "false").lower() == "true"
+  )
+  
+  await server.start(
+      host=os.getenv("APP_HOST", "0.0.0.0"),
+      port=int(os.getenv("APP_PORT", "8000"))
+  )
+  ```
+</Accordion>
+
+<Accordion title="Implement Health Checks">
+  Add custom health check endpoints for monitoring.
+  
+  ```python
+  @server.app.get("/health")
+  async def health_check():
+      return {"status": "healthy", "timestamp": datetime.utcnow().isoformat()}
+  ```
+</Accordion>
+
+<Accordion title="Use Lifespan for Resource Management">
+  Implement lifespan context managers for startup/shutdown tasks.
+  
+  ```python
+  from contextlib import asynccontextmanager
+  
+  @asynccontextmanager
+  async def lifespan(app: FastAPI):
+      # Startup
+      print("Initializing resources...")
+      yield
+      # Shutdown
+      print("Cleaning up resources...")
+  
+  server = APIServer(lifespan=lifespan)
+  ```
+</Accordion>
+
+## Related Components
+
+- [Application](/concepts/application) - Orchestrates server and worker
+- [Workflows](/concepts/workflows) - Register workflows with the server
+- [Handlers](/concepts/handlers) - Implement endpoint logic

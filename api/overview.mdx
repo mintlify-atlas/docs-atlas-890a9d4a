@@ -1,0 +1,126 @@
+---
+title: API Reference Overview
+description: Complete API reference for the Atlan Application SDK
+---
+
+The Atlan Application SDK is a Python library for building applications on the Atlan platform. It provides a comprehensive set of tools for workflow orchestration, data processing, and integration with Atlan services.
+
+## Core Components
+
+### Application Layer
+
+<CardGroup cols={2}>
+  <Card title="Application" icon="cube" href="/api/application">
+    Core application orchestration and lifecycle management
+  </Card>
+  <Card title="Workflows" icon="diagram-project" href="/api/workflows">
+    Temporal workflow definitions and execution
+  </Card>
+  <Card title="Activities" icon="list-check" href="/api/activities">
+    Workflow activity implementations and state management
+  </Card>
+  <Card title="Handlers" icon="hand" href="/api/handlers">
+    Request handlers for different data sources
+  </Card>
+</CardGroup>
+
+### Client Layer
+
+<CardGroup cols={2}>
+  <Card title="Clients" icon="plug" href="/api/clients">
+    Client interfaces for external services
+  </Card>
+  <Card title="Transformers" icon="repeat" href="/api/transformers">
+    Data transformation utilities
+  </Card>
+</CardGroup>
+
+### Services
+
+<CardGroup cols={2}>
+  <Card title="StateStore" icon="database" href="/api/services/statestore">
+    Persistent state management
+  </Card>
+  <Card title="ObjectStore" icon="box-archive" href="/api/services/objectstore">
+    Object storage operations
+  </Card>
+  <Card title="SecretStore" icon="key" href="/api/services/secretstore">
+    Secure credential management
+  </Card>
+  <Card title="EventStore" icon="bell" href="/api/services/eventstore">
+    Event publishing and management
+  </Card>
+  <Card title="AtlanStorage" icon="cloud-arrow-up" href="/api/services/atlan-storage">
+    Atlan storage migration utilities
+  </Card>
+</CardGroup>
+
+### Utilities
+
+<CardGroup cols={2}>
+  <Card title="Decorators" icon="at" href="/api/decorators">
+    Function decorators for common patterns
+  </Card>
+  <Card title="Observability" icon="chart-line" href="/api/observability">
+    Logging, metrics, and tracing
+  </Card>
+  <Card title="Test Utils" icon="flask" href="/api/test-utils">
+    Testing utilities and fixtures
+  </Card>
+</CardGroup>
+
+## Installation
+
+```bash
+pip install atlan-application-sdk
+```
+
+## Quick Start
+
+```python
+from application_sdk.application import BaseApplication
+from application_sdk.workflows import WorkflowInterface
+from application_sdk.activities import ActivitiesInterface
+
+# Define your workflow
+class MyWorkflow(WorkflowInterface):
+    @staticmethod
+    def get_activities(activities):
+        return [activities.my_activity]
+
+# Define your activities
+class MyActivities(ActivitiesInterface):
+    async def my_activity(self, workflow_args):
+        # Activity implementation
+        pass
+
+# Create and start application
+app = BaseApplication(name="my-app")
+await app.setup_workflow(
+    workflow_and_activities_classes=[
+        (MyWorkflow, MyActivities)
+    ]
+)
+await app.start(workflow_class=MyWorkflow)
+```
+
+## Architecture
+
+The SDK is built on several key concepts:
+
+- **Applications**: Orchestrate workflows, workers, and servers
+- **Workflows**: Define business logic using Temporal
+- **Activities**: Implement individual workflow tasks
+- **Handlers**: Process requests and coordinate client operations
+- **Clients**: Connect to external services and data sources
+- **Services**: Provide storage, state, and event management
+
+## Key Features
+
+- **Temporal Integration**: Built-in workflow orchestration
+- **State Management**: Persistent workflow state
+- **Object Storage**: File and directory operations
+- **Secret Management**: Secure credential handling
+- **Event Publishing**: Application event system
+- **Observability**: Comprehensive logging and metrics
+- **Testing**: Utilities for testing workflows and activities

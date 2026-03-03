@@ -1,0 +1,384 @@
+---
+title: Testing Framework
+description: Comprehensive testing for your applications with the SDK's test framework
+icon: flask
+---
+
+The Application SDK provides a comprehensive test framework to help you write end-to-end tests for your applications. The framework includes built-in test methods that verify everything from basic connectivity to full workflow execution and data validation.
+
+<Tip>
+See the [atlan-postgres-app test directory](https://github.com/atlanhq/atlan-postgres-app/tree/main/tests/e2e/test_postgres_workflow) for complete examples.
+</Tip>
+
+## BaseTest Class
+
+The `BaseTest` class provides a base implementation for end-to-end testing of workflows. It includes several key test methods that run in a specific order to validate your application comprehensively.
+
+### Test Execution Order
+
+The tests are executed in a predefined sequence using pytest's ordering:
+
+<Steps>
+  <Step title="Health Check">
+    **test_health_check** (Order 1)
+    
+    Verifies that the server is running and responding to requests by making a GET request to the host.
+  </Step>
+  
+  <Step title="Authentication">
+    **test_auth** (Order 2)
+    
+    Tests the authentication and connection flow by calling `test_connection` with provided credentials and validating against expected responses.
+  </Step>
+  
+  <Step title="Metadata Retrieval">
+    **test_metadata** (Order 3)
+    
+    Tests metadata retrieval by calling `get_metadata` with credentials and comparing to expected responses.
+  </Step>
+  
+  <Step title="Preflight Checks">
+    **test_preflight_check** (Order 4)
+    
+    Executes preflight checks using credentials and metadata, validating against expected responses.
+  </Step>
+  
+  <Step title="Workflow Execution">
+    **test_run_workflow** (Order 5)
+    
+    Tests the full workflow execution:
+    - Starts the workflow with credentials, metadata, and connection details
+    - Monitors the workflow until completion
+    - Raises a `WorkflowExecutionError` if workflow does not complete successfully
+  </Step>
+  
+  <Step title="Data Validation">
+    **test_data_validation** (Order 6)
+    
+    Validates the extracted source data against schema definitions using [Pandera](https://pandera.readthedocs.io/en/stable/).
+  </Step>
+</Steps>
+
+<Note>
+The execution order is specified using the `@pytest.mark.order` decorator. If you add custom test methods, use order values greater than 6 to run them after the built-in tests.
+</Note>
+
+## Required Properties
+
+The `BaseTest` class requires several properties to be defined:
+
+<ParamField path="config_file_path" type="string" required>
+  Path to the configuration file that defines test scenarios
+</ParamField>
+
+<ParamField path="extracted_output_base_path" type="string" required>
+  Base path for extracted output files (set in the override file)
+</ParamField>
+
+<ParamField path="schema_base_path" type="string" required>
+  Base path for schema files used in data validation
+</ParamField>
+
+<ParamField path="credentials" type="dict" required>
+  Dictionary containing authentication credentials
+</ParamField>
+
+<ParamField path="metadata" type="dict" required>
+  Dictionary containing metadata configuration
+</ParamField>
+
+<ParamField path="connection" type="dict" required>
+  Dictionary containing connection details
+</ParamField>
+
+## Configuration
+
+The test framework uses a YAML configuration file to configure tests and workflows.
+
+<Card title="Example Configuration" icon="code" href="https://github.com/atlanhq/atlan-postgres-app/blob/main/tests/e2e/test_postgres_workflow/config.yaml">
+  See a complete configuration example in the atlan-postgres-app repository.
+</Card>
+
+### Configuration Structure
+
+Here's a typical configuration structure:
+
+```yaml
+credentials:
+  authType: basic
+  host: localhost
+  port: 5432
+  username: postgres
+  password: password
+  database: test_db
+
+connection:
+  connection_name: test-postgres-connection
+  connection_qualified_name: default/postgres/test
+
+metadata:
+  exclude-filter: "{}"
+  include-filter: "{}"
+  temp-table-regex: "^temp_"
+  extraction-method: direct
+  exclude_views: "false"
+  exclude_empty_tables: "false"
+
+tenant_id: test-tenant
+
+schema_base_path: tests/e2e/test_postgres_workflow/schema
+extracted_output_base_path: /tmp/test_output
+```
+
+<Tip>
+Each configuration file corresponds to a test scenario. To add more test scenarios, copy the directory and modify the config file.
+</Tip>
+
+## Data Validation
+
+The `test_data_validation` method validates extracted data against schema definitions using [Pandera](https://pandera.readthedocs.io/en/stable/), a powerful data validation library for pandas DataFrames.
+
+### Schema Files
+
+Schema files define the expected structure and data types for extracted metadata:
+
+<CodeGroup>
+```python Database Schema
+import pandera as pa
+from pandera.typing import Series
+
+class DatabaseSchema(pa.SchemaModel):
+    database_name: Series[str] = pa.Field(nullable=False)
+    
+    class Config:
+        strict = True
+```
+
+```python Table Schema
+import pandera as pa
+from pandera.typing import Series
+
+class TableSchema(pa.SchemaModel):
+    table_catalog: Series[str] = pa.Field(nullable=False)
+    table_schema: Series[str] = pa.Field(nullable=False)
+    table_name: Series[str] = pa.Field(nullable=False)
+    table_type: Series[str] = pa.Field(nullable=False)
+    
+    class Config:
+        strict = True
+```
+
+```python Column Schema
+import pandera as pa
+from pandera.typing import Series
+
+class ColumnSchema(pa.SchemaModel):
+    table_catalog: Series[str] = pa.Field(nullable=False)
+    table_schema: Series[str] = pa.Field(nullable=False)
+    table_name: Series[str] = pa.Field(nullable=False)
+    column_name: Series[str] = pa.Field(nullable=False)
+    ordinal_position: Series[int] = pa.Field(nullable=False, ge=1)
+    data_type: Series[str] = pa.Field(nullable=False)
+    
+    class Config:
+        strict = True
+```
+</CodeGroup>
+
+<Card title="Example Schema Files" icon="github" href="https://github.com/atlanhq/atlan-postgres-app/tree/main/tests/e2e/test_postgres_workflow/schema">
+  View complete schema examples in the atlan-postgres-app repository.
+</Card>
+
+### Custom Validation
+
+You can override the `test_data_validation` method to add custom validation logic:
+
+```python
+import pandas as pd
+import pandera as pa
+from application_sdk.test_utils import BaseTest
+
+class CustomTest(BaseTest):
+    def test_data_validation(self):
+        # Call parent validation
+        super().test_data_validation()
+        
+        # Add custom validation logic
+        table_df = pd.read_parquet(
+            f"{self.extracted_output_base_path}/tables.parquet"
+        )
+        
+        # Custom check: ensure no empty table names
+        assert not table_df["table_name"].str.strip().eq("").any(), \
+            "Found tables with empty names"
+        
+        # Custom check: validate table count
+        assert len(table_df) > 0, "No tables extracted"
+        
+        print(f"Validated {len(table_df)} tables successfully")
+```
+
+## Running Tests
+
+Run tests using pytest from your project root:
+
+<CodeGroup>
+```bash All Tests
+pytest tests/e2e/test_postgres_workflow
+```
+
+```bash Specific Test
+pytest tests/e2e/test_postgres_workflow/test_basic.py
+```
+
+```bash With Verbose Output
+pytest tests/e2e/test_postgres_workflow -v
+```
+
+```bash With Coverage
+pytest tests/e2e/test_postgres_workflow --cov=application_sdk
+```
+</CodeGroup>
+
+### Test Output
+
+The test framework provides detailed output for each test:
+
+```bash
+tests/e2e/test_postgres_workflow/test_basic.py::TestPostgresWorkflow::test_health_check PASSED
+tests/e2e/test_postgres_workflow/test_basic.py::TestPostgresWorkflow::test_auth PASSED
+tests/e2e/test_postgres_workflow/test_basic.py::TestPostgresWorkflow::test_metadata PASSED
+tests/e2e/test_postgres_workflow/test_basic.py::TestPostgresWorkflow::test_preflight_check PASSED
+tests/e2e/test_postgres_workflow/test_basic.py::TestPostgresWorkflow::test_run_workflow PASSED
+tests/e2e/test_postgres_workflow/test_basic.py::TestPostgresWorkflow::test_data_validation PASSED
+```
+
+<Tip>
+Use the `-s` flag with pytest to see print statements and logs: `pytest tests/e2e/test_postgres_workflow -s`
+</Tip>
+
+## Adding Custom Test Steps
+
+To add additional test steps after the built-in ones:
+
+```python
+import pytest
+from application_sdk.test_utils import BaseTest
+
+class CustomTest(BaseTest):
+    # ... existing test setup ...
+    
+    @pytest.mark.order(7)  # Run after test_data_validation (order 6)
+    def test_custom_validation(self):
+        """Custom validation logic."""
+        # Your custom test logic here
+        pass
+    
+    @pytest.mark.order(8)
+    def test_cleanup(self):
+        """Clean up test resources."""
+        # Your cleanup logic here
+        pass
+```
+
+<Warning>
+Always use order values greater than 6 for custom test methods to ensure they run after the built-in validation tests.
+</Warning>
+
+## Multiple Test Scenarios
+
+You can create multiple test scenarios by copying the test directory structure:
+
+```bash
+tests/e2e/
+├── test_postgres_workflow_basic/
+│   ├── config.yaml
+│   ├── schema/
+│   └── test_basic.py
+├── test_postgres_workflow_filtered/
+│   ├── config.yaml
+│   ├── schema/
+│   └── test_filtered.py
+└── test_postgres_workflow_views/
+    ├── config.yaml
+    ├── schema/
+    └── test_views.py
+```
+
+Each directory represents a different test scenario with its own configuration.
+
+## Best Practices
+
+<AccordionGroup>
+  <Accordion title="Organize by Scenario" icon="folder-tree">
+    Create separate test directories for different scenarios (basic extraction, filtered extraction, view handling, etc.).
+  </Accordion>
+  
+  <Accordion title="Use Descriptive Names" icon="tag">
+    Name test files and methods descriptively to make test results easy to understand.
+  </Accordion>
+  
+  <Accordion title="Validate Thoroughly" icon="check-double">
+    Define comprehensive schema files that validate all expected fields and data types.
+  </Accordion>
+  
+  <Accordion title="Test Edge Cases" icon="vial">
+    Create test scenarios for edge cases like empty databases, special characters, or large datasets.
+  </Accordion>
+  
+  <Accordion title="Clean Up Resources" icon="broom">
+    Add cleanup steps to remove temporary files and resources after tests complete.
+  </Accordion>
+  
+  <Accordion title="Version Control Config" icon="code-branch">
+    Keep test configuration files in version control, but never commit actual credentials.
+  </Accordion>
+</AccordionGroup>
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Health Check Fails" icon="heart-pulse">
+    - Verify the application server is running
+    - Check the host and port in your configuration
+    - Ensure firewall rules allow connections
+  </Accordion>
+  
+  <Accordion title="Authentication Fails" icon="key">
+    - Verify credentials in the configuration file
+    - Check that the database user has necessary permissions
+    - Ensure the authentication type matches your database setup
+  </Accordion>
+  
+  <Accordion title="Workflow Execution Fails" icon="circle-exclamation">
+    - Check Temporal server logs for errors
+    - Verify worker is running and registered
+    - Review activity logs for specific error messages
+  </Accordion>
+  
+  <Accordion title="Data Validation Fails" icon="triangle-exclamation">
+    - Check schema files match the actual extracted data structure
+    - Review Pandera error messages for specific validation failures
+    - Verify extracted output files exist at the expected paths
+  </Accordion>
+</AccordionGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Best Practices" icon="star" href="/guides/best-practices">
+    Learn best practices for building scalable applications.
+  </Card>
+  
+  <Card title="SQL Applications" icon="database" href="/guides/sql-applications">
+    Build comprehensive SQL metadata extraction applications.
+  </Card>
+  
+  <Card title="PostgreSQL Example" icon="github" href="https://github.com/atlanhq/atlan-postgres-app">
+    Explore a complete production-ready example with tests.
+  </Card>
+  
+  <Card title="Pandera Documentation" icon="book" href="https://pandera.readthedocs.io/">
+    Learn more about data validation with Pandera.
+  </Card>
+</CardGroup>

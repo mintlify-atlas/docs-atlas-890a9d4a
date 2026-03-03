@@ -1,0 +1,92 @@
+---
+title: Introduction
+description: Build resilient applications on the Atlan platform with Temporal workflows and Dapr infrastructure
+---
+
+# Atlan Application SDK
+
+The Atlan Application SDK is a Python library designed for building applications on the Atlan platform. It offers a full PaaS (Platform-as-a-Service) toolkit — from local development to deployment and partner collaboration — so you can create integrations and tools that seamlessly extend the Atlan experience for our mutual customers.
+
+## Key features
+
+<CardGroup cols={2}>
+  <Card title="Temporal workflows" icon="clock-rotate-left">
+    Orchestrate complex workflows with built-in reliability, retries, and state management
+  </Card>
+  <Card title="Dapr infrastructure" icon="layer-group">
+    Abstract infrastructure concerns with portable state stores, object storage, and secret management
+  </Card>
+  <Card title="SQL data extraction" icon="database">
+    Extract and process metadata from SQL databases with customizable transformers
+  </Card>
+  <Card title="FastAPI integration" icon="bolt">
+    Built-in FastAPI server with workflow triggers and event subscriptions
+  </Card>
+  <Card title="Observability" icon="chart-line">
+    Comprehensive logging, metrics, and tracing with OpenTelemetry integration
+  </Card>
+  <Card title="Extensible architecture" icon="puzzle-piece">
+    Customize handlers, clients, activities, and transformers for your use case
+  </Card>
+</CardGroup>
+
+## Architecture
+
+The SDK is built on two powerful technologies:
+
+- **[Temporal](https://temporal.io)**: A microservices orchestration platform for building scalable and reliable applications. Temporal handles workflow execution, state management, and retries.
+- **[Dapr](https://dapr.io)**: A portable, event-driven runtime that provides building blocks for state management, pub/sub, and service invocation.
+
+This architecture enables you to:
+
+- Focus on business logic instead of infrastructure
+- Build resilient applications with automatic retries
+- Scale workflows horizontally
+- Deploy to any cloud provider
+
+## Get started
+
+<CardGroup cols={2}>
+  <Card title="Installation" icon="download" href="/installation">
+    Install the SDK with pip, uv, or poetry
+  </Card>
+  <Card title="Quickstart" icon="rocket" href="/quickstart">
+    Build your first application in 5 minutes
+  </Card>
+  <Card title="Core concepts" icon="book" href="/concepts/application">
+    Learn about workflows, activities, and handlers
+  </Card>
+  <Card title="Examples" icon="code" href="/examples/hello-world">
+    Explore real-world application examples
+  </Card>
+</CardGroup>
+
+## Use cases
+
+The Atlan Application SDK is ideal for:
+
+- **Metadata extraction**: Extract metadata from databases, data warehouses, and APIs
+- **Data cataloging**: Build custom integrations with the Atlan catalog
+- **Workflow automation**: Orchestrate complex data pipelines and processes
+- **Custom applications**: Extend Atlan with domain-specific functionality
+
+## Community and support
+
+<CardGroup cols={2}>
+  <Card title="GitHub repository" icon="github" href="https://github.com/atlanhq/application-sdk">
+    View source code, report issues, and contribute
+  </Card>
+  <Card title="Sample apps" icon="flask" href="https://github.com/atlanhq/atlan-sample-apps">
+    Explore production-ready sample applications
+  </Card>
+  <Card title="Partner guide" icon="handshake" href="https://docs.atlan.com/product/capabilities/build-apps/partner-with-us/concepts/partner-journey">
+    Learn about partnering with Atlan
+  </Card>
+  <Card title="Security" icon="shield" href="https://github.com/atlanhq/application-sdk/blob/main/SECURITY.md">
+    Report security vulnerabilities
+  </Card>
+</CardGroup>
+
+## Next steps
+
+Ready to get started? Follow our [installation guide](/installation) to set up the SDK, then build your first application with the [quickstart tutorial](/quickstart).

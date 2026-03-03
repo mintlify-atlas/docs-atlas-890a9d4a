@@ -1,122 +1,140 @@
 {
   "$schema": "https://mintlify.com/docs.json",
-  "theme": "mint",
-  "name": "Mint Starter Kit",
+  "name": "Atlan Application SDK",
+  "theme": "palm",
   "colors": {
-    "primary": "#16A34A",
-    "light": "#07C983",
-    "dark": "#15803D"
+    "primary": "#4945FF",
+    "light": "#7C7AFF",
+    "dark": "#3733E5"
   },
-  "favicon": "/favicon.svg",
+  "navbar": {
+    "primary": {
+      "type": "github",
+      "href": "https://github.com/atlanhq/application-sdk"
+    }
+  },
+  "footer": {
+    "socials": {
+      "github": "https://github.com/atlanhq/application-sdk"
+    }
+  },
   "navigation": {
     "tabs": [
       {
-        "tab": "Guides",
+        "tab": "Documentation",
         "groups": [
           {
-            "group": "Getting started",
+            "group": "Get Started",
             "pages": [
-              "index",
-              "quickstart",
-              "development"
+              "introduction",
+              "installation",
+              "quickstart"
             ]
           },
           {
-            "group": "Customization",
+            "group": "Core Concepts",
             "pages": [
-              "essentials/settings",
-              "essentials/navigation"
+              "concepts/application",
+              "concepts/workflows",
+              "concepts/activities",
+              "concepts/handlers",
+              "concepts/clients",
+              "concepts/server",
+              "concepts/worker"
             ]
           },
           {
-            "group": "Writing content",
+            "group": "Guides",
             "pages": [
-              "essentials/markdown",
-              "essentials/code",
-              "essentials/images",
-              "essentials/reusable-snippets"
+              "guides/architecture",
+              "guides/sql-applications",
+              "guides/testing",
+              "guides/best-practices",
+              "guides/secret-stores"
             ]
           },
           {
-            "group": "AI tools",
+            "group": "Services",
             "pages": [
-              "ai-tools/cursor",
-              "ai-tools/claude-code",
-              "ai-tools/windsurf"
+              "services/overview",
+              "services/statestore",
+              "services/objectstore",
+              "services/secretstore",
+              "services/eventstore",
+              "services/atlan-storage"
+            ]
+          },
+          {
+            "group": "Advanced",
+            "pages": [
+              "advanced/mcp-integration",
+              "advanced/monitoring",
+              "advanced/temporal-auth",
+              "advanced/inputs-outputs"
             ]
           }
         ]
       },
       {
-        "tab": "API reference",
+        "tab": "API Reference",
         "groups": [
           {
-            "group": "API documentation",
+            "group": "Overview",
             "pages": [
-              "api-reference/introduction"
+              "api/overview"
             ]
           },
           {
-            "group": "Endpoint examples",
+            "group": "Core Modules",
             "pages": [
-              "api-reference/endpoint/get",
-              "api-reference/endpoint/create",
-              "api-reference/endpoint/delete",
-              "api-reference/endpoint/webhook"
+              "api/application",
+              "api/workflows",
+              "api/activities",
+              "api/handlers",
+              "api/clients"
+            ]
+          },
+          {
+            "group": "Services",
+            "pages": [
+              "api/services/statestore",
+              "api/services/objectstore",
+              "api/services/secretstore",
+              "api/services/eventstore",
+              "api/services/atlan-storage"
+            ]
+          },
+          {
+            "group": "Data & I/O",
+            "pages": [
+              "api/io",
+              "api/transformers"
+            ]
+          },
+          {
+            "group": "Utilities",
+            "pages": [
+              "api/decorators",
+              "api/observability",
+              "api/test-utils"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "Examples",
+        "groups": [
+          {
+            "group": "Example Applications",
+            "pages": [
+              "examples/hello-world",
+              "examples/sql-application",
+              "examples/sql-with-transformers",
+              "examples/custom-fastapi"
             ]
           }
         ]
       }
-    ],
-    "global": {
-      "anchors": [
-        {
-          "anchor": "Documentation",
-          "href": "https://mintlify.com/docs",
-          "icon": "book-open-cover"
-        },
-        {
-          "anchor": "Blog",
-          "href": "https://mintlify.com/blog",
-          "icon": "newspaper"
-        }
-      ]
-    }
-  },
-  "logo": {
-    "light": "/logo/light.svg",
-    "dark": "/logo/dark.svg"
-  },
-  "navbar": {
-    "links": [
-      {
-        "label": "Support",
-        "href": "mailto:hi@mintlify.com"
-      }
-    ],
-    "primary": {
-      "type": "button",
-      "label": "Dashboard",
-      "href": "https://dashboard.mintlify.com"
-    }
-  },
-  "contextual": {
-    "options": [
-     "copy",
-     "view",
-     "chatgpt",
-     "claude",
-     "perplexity",
-     "mcp",
-     "cursor",
-     "vscode"
-   ]
-  },
-  "footer": {
-    "socials": {
-      "x": "https://x.com/mintlify",
-      "github": "https://github.com/mintlify",
-      "linkedin": "https://linkedin.com/company/mintlify"
-    }
+    ]
   }
 }

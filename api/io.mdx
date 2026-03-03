@@ -1,0 +1,388 @@
+---
+title: I/O Operations
+description: File and data input/output utilities
+---
+
+The I/O module provides utilities for working with files and data formats.
+
+## File Operations
+
+### SafeFileOps
+
+`application_sdk.common.file_ops.SafeFileOps`
+
+Safe file operations with path validation and error handling.
+
+#### Methods
+
+##### open
+
+Safely open a file with path validation.
+
+```python
+from application_sdk.common.file_ops import SafeFileOps
+
+with SafeFileOps.open(file_path, mode='r') as f:
+    content = f.read()
+```
+
+<ParamField path="file_path" type="str" required>
+  Path to the file
+</ParamField>
+
+<ParamField path="mode" type="str" default="'r'">
+  File open mode ('r', 'w', 'rb', 'wb', etc.)
+</ParamField>
+
+<ResponseField name="return" type="FileHandle">
+  File handle that can be used with context manager
+</ResponseField>
+
+##### makedirs
+
+Create directories safely.
+
+```python
+SafeFileOps.makedirs(directory_path, exist_ok=True)
+```
+
+<ParamField path="directory_path" type="str" required>
+  Path to create
+</ParamField>
+
+<ParamField path="exist_ok" type="bool" default="False">
+  If True, don't raise error if directory exists
+</ParamField>
+
+##### exists
+
+Check if a path exists.
+
+```python
+if SafeFileOps.exists(file_path):
+    # File exists
+    pass
+```
+
+<ParamField path="path" type="str" required>
+  Path to check
+</ParamField>
+
+<ResponseField name="return" type="bool">
+  True if path exists, False otherwise
+</ResponseField>
+
+##### isfile
+
+Check if path is a file.
+
+```python
+if SafeFileOps.isfile(path):
+    # Is a file
+    pass
+```
+
+##### isdir
+
+Check if path is a directory.
+
+```python
+if SafeFileOps.isdir(path):
+    # Is a directory
+    pass
+```
+
+##### remove
+
+Remove a file.
+
+```python
+SafeFileOps.remove(file_path)
+```
+
+##### rmtree
+
+Remove a directory tree.
+
+```python
+SafeFileOps.rmtree(directory_path)
+```
+
+## File Conversion
+
+### convert_data_files
+
+`application_sdk.common.file_converter.convert_data_files`
+
+Convert data files between formats.
+
+```python
+from application_sdk.common.file_converter import convert_data_files, FileType
+
+converted_files = await convert_data_files(
+    input_files: List[str],
+    output_type: FileType
+)
+```
+
+<ParamField path="input_files" type="List[str]" required>
+  List of input file paths to convert
+</ParamField>
+
+<ParamField path="output_type" type="FileType" required>
+  Target file type (FileType.JSON, FileType.PARQUET, FileType.CSV)
+</ParamField>
+
+<ResponseField name="return" type="List[str]">
+  List of converted file paths
+</ResponseField>
+
+### FileType Enum
+
+```python
+from application_sdk.common.file_converter import FileType
+
+FileType.JSON       # JSON format
+FileType.PARQUET    # Parquet format
+FileType.CSV        # CSV format
+```
+
+## Example Usage
+
+### Reading Files
+
+```python
+from application_sdk.common.file_ops import SafeFileOps
+import json
+
+# Read text file
+with SafeFileOps.open("/path/to/file.txt", "r") as f:
+    content = f.read()
+
+# Read JSON file
+with SafeFileOps.open("/path/to/data.json", "r") as f:
+    data = json.load(f)
+
+# Read binary file
+with SafeFileOps.open("/path/to/file.bin", "rb") as f:
+    binary_data = f.read()
+```
+
+### Writing Files
+
+```python
+from application_sdk.common.file_ops import SafeFileOps
+import json
+
+# Write text file
+with SafeFileOps.open("/path/to/output.txt", "w") as f:
+    f.write("Hello, World!")
+
+# Write JSON file
+data = {"key": "value"}
+with SafeFileOps.open("/path/to/output.json", "w") as f:
+    json.dump(data, f, indent=2)
+
+# Write binary file
+with SafeFileOps.open("/path/to/output.bin", "wb") as f:
+    f.write(binary_data)
+```
+
+### Directory Operations
+
+```python
+from application_sdk.common.file_ops import SafeFileOps
+import os
+
+# Create directory
+output_dir = "/path/to/output"
+SafeFileOps.makedirs(output_dir, exist_ok=True)
+
+# Check if directory exists
+if SafeFileOps.exists(output_dir):
+    print("Directory exists")
+
+# Check if path is directory
+if SafeFileOps.isdir(output_dir):
+    print("Is a directory")
+
+# List files in directory
+if SafeFileOps.isdir(output_dir):
+    for filename in os.listdir(output_dir):
+        file_path = os.path.join(output_dir, filename)
+        if SafeFileOps.isfile(file_path):
+            print(f"File: {filename}")
+```
+
+### File Conversion
+
+```python
+from application_sdk.common.file_converter import convert_data_files, FileType
+
+# Convert JSON to Parquet
+json_files = [
+    "/path/to/data1.json",
+    "/path/to/data2.json"
+]
+
+parquet_files = await convert_data_files(
+    input_files=json_files,
+    output_type=FileType.PARQUET
+)
+
+print(f"Converted {len(parquet_files)} files to Parquet")
+
+# Convert Parquet to CSV
+csv_files = await convert_data_files(
+    input_files=parquet_files,
+    output_type=FileType.CSV
+)
+```
+
+### Safe File Operations with Error Handling
+
+```python
+from application_sdk.common.file_ops import SafeFileOps
+from application_sdk.observability.logger_adaptor import get_logger
+
+logger = get_logger(__name__)
+
+def read_config_file(file_path: str) -> dict:
+    """Read configuration file safely."""
+    try:
+        if not SafeFileOps.exists(file_path):
+            logger.warning(f"Config file not found: {file_path}")
+            return {}
+        
+        if not SafeFileOps.isfile(file_path):
+            logger.error(f"Path is not a file: {file_path}")
+            return {}
+        
+        with SafeFileOps.open(file_path, "r") as f:
+            content = f.read()
+            return json.loads(content)
+    
+    except Exception as e:
+        logger.error(f"Failed to read config: {e}", exc_info=True)
+        return {}
+```
+
+### Batch File Processing
+
+```python
+from application_sdk.common.file_ops import SafeFileOps
+import os
+
+async def process_directory(input_dir: str, output_dir: str):
+    """Process all files in a directory."""
+    
+    # Create output directory
+    SafeFileOps.makedirs(output_dir, exist_ok=True)
+    
+    # Process each file
+    for filename in os.listdir(input_dir):
+        input_path = os.path.join(input_dir, filename)
+        
+        if not SafeFileOps.isfile(input_path):
+            continue
+        
+        # Read input file
+        with SafeFileOps.open(input_path, "r") as f:
+            data = f.read()
+        
+        # Process data
+        processed = process_data(data)
+        
+        # Write output file
+        output_path = os.path.join(output_dir, filename)
+        with SafeFileOps.open(output_path, "w") as f:
+            f.write(processed)
+```
+
+### Cleanup Operations
+
+```python
+from application_sdk.common.file_ops import SafeFileOps
+
+def cleanup_temp_files(temp_dir: str):
+    """Clean up temporary files and directories."""
+    try:
+        if SafeFileOps.exists(temp_dir):
+            if SafeFileOps.isdir(temp_dir):
+                # Remove entire directory tree
+                SafeFileOps.rmtree(temp_dir)
+            elif SafeFileOps.isfile(temp_dir):
+                # Remove single file
+                SafeFileOps.remove(temp_dir)
+    except Exception as e:
+        logger.warning(f"Failed to cleanup {temp_dir}: {e}")
+```
+
+### Working with Workflow Outputs
+
+```python
+from application_sdk.common.file_ops import SafeFileOps
+from application_sdk.common.file_converter import convert_data_files, FileType
+import os
+
+async def save_workflow_output(
+    data: list,
+    output_path: str,
+    format: FileType = FileType.JSON
+):
+    """Save workflow output to file."""
+    
+    # Create output directory
+    output_dir = os.path.dirname(output_path)
+    SafeFileOps.makedirs(output_dir, exist_ok=True)
+    
+    # Save as JSON first
+    json_path = output_path + ".json"
+    with SafeFileOps.open(json_path, "w") as f:
+        json.dump(data, f, indent=2)
+    
+    # Convert to desired format if not JSON
+    if format != FileType.JSON:
+        converted = await convert_data_files(
+            input_files=[json_path],
+            output_type=format
+        )
+        
+        # Remove intermediate JSON file
+        SafeFileOps.remove(json_path)
+        
+        return converted[0]
+    
+    return json_path
+```
+
+## Best Practices
+
+### File Operations
+
+- Always use SafeFileOps instead of standard file operations
+- Use context managers (with statement) for file handles
+- Check file existence before operations
+- Handle exceptions appropriately
+- Close files properly
+
+### Path Management
+
+- Use os.path.join for cross-platform compatibility
+- Validate paths before operations
+- Use absolute paths when possible
+- Check path types (file vs directory)
+
+### Error Handling
+
+- Always handle potential I/O errors
+- Log errors with appropriate context
+- Provide fallback behavior
+- Clean up resources in finally blocks
+
+### File Conversion
+
+- Validate input files before conversion
+- Handle conversion errors gracefully
+- Clean up intermediate files
+- Use appropriate formats for data types

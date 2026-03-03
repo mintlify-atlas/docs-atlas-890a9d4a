@@ -1,0 +1,468 @@
+---
+title: Clients
+description: Client interfaces for external services
+---
+
+Clients provide the low-level interface for connecting to external services, databases, and APIs.
+
+## ClientInterface
+
+`application_sdk.clients.ClientInterface`
+
+Base interface class for implementing client connections.
+
+### Methods
+
+#### load
+
+Establish the client connection.
+
+```python
+async def load(*args: Any, **kwargs: Any) -> None
+```
+
+<ParamField path="*args" type="Any">
+  Variable positional arguments
+</ParamField>
+
+<ParamField path="**kwargs" type="Any">
+  Variable keyword arguments, typically including credentials
+</ParamField>
+
+<ResponseField name="raises" type="NotImplementedError">
+  If the subclass does not implement this method
+</ResponseField>
+
+#### close
+
+Close the client connection.
+
+```python
+async def close(*args: Any, **kwargs: Any) -> None
+```
+
+<ParamField path="*args" type="Any">
+  Variable positional arguments
+</ParamField>
+
+<ParamField path="**kwargs" type="Any">
+  Variable keyword arguments
+</ParamField>
+
+<Note>
+  Default implementation does nothing. Override if cleanup is needed.
+</Note>
+
+## BaseClient
+
+`application_sdk.clients.base.BaseClient`
+
+Base client implementation for non-SQL based applications with HTTP support.
+
+### Constructor
+
+```python
+BaseClient(
+    credentials: Dict[str, Any] = {},
+    http_headers: HeaderTypes = {}
+)
+```
+
+<ParamField path="credentials" type="Dict[str, Any]" default="{}">
+  Client credentials for authentication
+</ParamField>
+
+<ParamField path="http_headers" type="HeaderTypes" default="{}">
+  HTTP headers for all requests. Supports dict, Headers object, or list of tuples.
+</ParamField>
+
+### Attributes
+
+<ResponseField name="credentials" type="Dict[str, Any]">
+  Client credentials for authentication
+</ResponseField>
+
+<ResponseField name="http_headers" type="HeaderTypes">
+  HTTP headers for all http requests made by this client
+</ResponseField>
+
+<ResponseField name="http_retry_transport" type="httpx.AsyncBaseTransport">
+  HTTP transport for requests. Uses httpx default transport by default.
+  Can be overridden in load() method for custom retry behavior.
+</ResponseField>
+
+### Methods
+
+#### load
+
+Initialize the client with credentials.
+
+```python
+async def load(**kwargs: Any) -> None
+```
+
+<ParamField path="**kwargs" type="Any" required>
+  Keyword arguments, typically including credentials
+</ParamField>
+
+<ResponseField name="raises" type="NotImplementedError">
+  If the subclass does not implement this method
+</ResponseField>
+
+<Note>
+  Subclasses should override this to:
+  - Set up authentication headers in self.http_headers
+  - Initialize any required client state
+  - Handle credential processing
+  - Optionally override self.http_retry_transport for custom retry behavior
+</Note>
+
+#### execute_http_get_request
+
+Perform an HTTP GET request.
+
+```python
+await client.execute_http_get_request(
+    url: str,
+    headers: Optional[HeaderTypes] = None,
+    params: Optional[QueryParamTypes] = None,
+    auth: Optional[AuthTypes] = None,
+    timeout: int = 10
+) -> Optional[httpx.Response]
+```
+
+<ParamField path="url" type="str" required>
+  The URL to make the GET request to
+</ParamField>
+
+<ParamField path="headers" type="HeaderTypes" default="None">
+  HTTP headers to include. These override/add to client-level headers.
+  Supports dict, Headers object, or list of tuples.
+</ParamField>
+
+<ParamField path="params" type="QueryParamTypes" default="None">
+  Query parameters. Supports dict, list of tuples, or string.
+</ParamField>
+
+<ParamField path="auth" type="AuthTypes" default="None">
+  Authentication to use. Supports BasicAuth, DigestAuth, custom auth classes, or tuples for basic auth.
+</ParamField>
+
+<ParamField path="timeout" type="int" default="10">
+  Request timeout in seconds
+</ParamField>
+
+<ResponseField name="return" type="httpx.Response | None">
+  The HTTP response if successful, None if failed
+</ResponseField>
+
+#### execute_http_post_request
+
+Perform an HTTP POST request.
+
+```python
+await client.execute_http_post_request(
+    url: str,
+    data: Optional[RequestData] = None,
+    json_data: Optional[Any] = None,
+    content: Optional[bytes] = None,
+    files: Optional[RequestFiles] = None,
+    headers: Optional[HeaderTypes] = None,
+    params: Optional[QueryParamTypes] = None,
+    cookies: Optional[Dict[str, str]] = None,
+    auth: Optional[AuthTypes] = None,
+    follow_redirects: bool = True,
+    verify: bool = True,
+    timeout: int = 30
+) -> Optional[httpx.Response]
+```
+
+<ParamField path="url" type="str" required>
+  The URL to make the POST request to
+</ParamField>
+
+<ParamField path="data" type="RequestData" default="None">
+  Form data to send. Supports dict, list of tuples, or other httpx-compatible formats.
+</ParamField>
+
+<ParamField path="json_data" type="Any" default="None">
+  JSON data to send. Any JSON-serializable object.
+</ParamField>
+
+<ParamField path="content" type="bytes" default="None">
+  Raw binary content to send
+</ParamField>
+
+<ParamField path="files" type="RequestFiles" default="None">
+  Files to upload. Supports various file formats and tuples.
+</ParamField>
+
+<ParamField path="headers" type="HeaderTypes" default="None">
+  HTTP headers to include. These override/add to client-level headers.
+</ParamField>
+
+<ParamField path="params" type="QueryParamTypes" default="None">
+  Query parameters
+</ParamField>
+
+<ParamField path="cookies" type="Dict[str, str]" default="None">
+  Cookies to include
+</ParamField>
+
+<ParamField path="auth" type="AuthTypes" default="None">
+  Authentication to use
+</ParamField>
+
+<ParamField path="follow_redirects" type="bool" default="True">
+  Whether to follow HTTP redirects
+</ParamField>
+
+<ParamField path="verify" type="bool" default="True">
+  Whether to verify SSL certificates
+</ParamField>
+
+<ParamField path="timeout" type="int" default="30">
+  Request timeout in seconds
+</ParamField>
+
+<ResponseField name="return" type="httpx.Response | None">
+  The HTTP response if successful, None if failed
+</ResponseField>
+
+## Example Usage
+
+### Basic HTTP Client
+
+```python
+from application_sdk.clients.base import BaseClient
+from typing import Dict, Any, Optional
+import httpx
+
+class APIClient(BaseClient):
+    async def load(self, **kwargs):
+        """Initialize client with API key."""
+        credentials = kwargs.get("credentials", {})
+        api_key = credentials.get("api_key")
+        
+        # Set up authentication headers
+        self.http_headers = {
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json"
+        }
+    
+    async def get_users(self) -> Optional[Dict[str, Any]]:
+        """Fetch users from API."""
+        response = await self.execute_http_get_request(
+            url="https://api.example.com/users",
+            params={"limit": 100}
+        )
+        return response.json() if response else None
+    
+    async def create_user(self, user_data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        """Create a new user."""
+        response = await self.execute_http_post_request(
+            url="https://api.example.com/users",
+            json_data=user_data
+        )
+        return response.json() if response else None
+```
+
+### Client with Retry Logic
+
+```python
+from application_sdk.clients.base import BaseClient
+from httpx_retries import Retry, RetryTransport
+import httpx
+
+class ResilientClient(BaseClient):
+    async def load(self, **kwargs):
+        credentials = kwargs.get("credentials", {})
+        
+        # Set up headers
+        self.http_headers = {
+            "Authorization": f"Bearer {credentials.get('token')}"
+        }
+        
+        # Configure retry transport for status code-based retries
+        retry = Retry(
+            total=5,
+            backoff_factor=10,
+            status_forcelist=[429, 500, 502, 503, 504]
+        )
+        self.http_retry_transport = RetryTransport(retry=retry)
+    
+    async def fetch_data(self, endpoint: str):
+        """Fetch data with automatic retries."""
+        response = await self.execute_http_get_request(
+            url=f"https://api.example.com/{endpoint}"
+        )
+        return response.json() if response else None
+```
+
+### Client with Basic Auth
+
+```python
+from application_sdk.clients.base import BaseClient
+from httpx import BasicAuth
+from typing import Optional, Dict, Any
+
+class BasicAuthClient(BaseClient):
+    async def load(self, **kwargs):
+        credentials = kwargs.get("credentials", {})
+        self.username = credentials.get("username")
+        self.password = credentials.get("password")
+    
+    async def fetch_protected_resource(self) -> Optional[Dict[str, Any]]:
+        """Fetch resource using basic authentication."""
+        response = await self.execute_http_get_request(
+            url="https://api.example.com/protected",
+            auth=BasicAuth(self.username, self.password)
+        )
+        return response.json() if response else None
+```
+
+### File Upload Client
+
+```python
+from application_sdk.clients.base import BaseClient
+from typing import Optional, Dict, Any
+import os
+
+class FileUploadClient(BaseClient):
+    async def load(self, **kwargs):
+        credentials = kwargs.get("credentials", {})
+        self.http_headers = {
+            "Authorization": f"Bearer {credentials.get('token')}"
+        }
+    
+    async def upload_file(
+        self,
+        file_path: str,
+        description: str = ""
+    ) -> Optional[Dict[str, Any]]:
+        """Upload a file to the API."""
+        with open(file_path, "rb") as f:
+            file_content = f.read()
+            filename = os.path.basename(file_path)
+            
+            response = await self.execute_http_post_request(
+                url="https://api.example.com/upload",
+                data={"description": description},
+                files={
+                    "file": (filename, file_content, "application/octet-stream")
+                }
+            )
+        
+        return response.json() if response else None
+```
+
+### Multi-Header Client
+
+```python
+from application_sdk.clients.base import BaseClient
+from httpx import Headers
+from typing import Dict, Any
+
+class MultiHeaderClient(BaseClient):
+    async def load(self, **kwargs):
+        credentials = kwargs.get("credentials", {})
+        
+        # Set client-level headers using Headers object
+        self.http_headers = Headers({
+            "Authorization": f"Bearer {credentials.get('token')}",
+            "User-Agent": "MyApp/1.0",
+            "Accept": "application/json"
+        })
+    
+    async def fetch_json(self, endpoint: str):
+        """Fetch JSON data."""
+        response = await self.execute_http_get_request(
+            url=f"https://api.example.com/{endpoint}",
+            headers={"Content-Type": "application/json"}  # Adds to client headers
+        )
+        return response.json() if response else None
+    
+    async def fetch_xml(self, endpoint: str):
+        """Fetch XML data."""
+        response = await self.execute_http_get_request(
+            url=f"https://api.example.com/{endpoint}",
+            headers={"Accept": "application/xml"}  # Overrides client Accept header
+        )
+        return response.text if response else None
+```
+
+### Client with Connection Pooling
+
+```python
+from application_sdk.clients.base import BaseClient
+import httpx
+from typing import Optional, Dict, Any
+
+class PooledClient(BaseClient):
+    def __init__(self):
+        super().__init__()
+        self._client: Optional[httpx.AsyncClient] = None
+    
+    async def load(self, **kwargs):
+        credentials = kwargs.get("credentials", {})
+        
+        self.http_headers = {
+            "Authorization": f"Bearer {credentials.get('token')}"
+        }
+        
+        # Create persistent client with connection pooling
+        self._client = httpx.AsyncClient(
+            headers=self.http_headers,
+            timeout=30.0,
+            limits=httpx.Limits(
+                max_keepalive_connections=20,
+                max_connections=100
+            )
+        )
+    
+    async def fetch_data(self, endpoint: str) -> Optional[Dict[str, Any]]:
+        """Fetch data using pooled connection."""
+        if not self._client:
+            raise ValueError("Client not loaded")
+        
+        response = await self._client.get(
+            f"https://api.example.com/{endpoint}"
+        )
+        return response.json() if response.status_code == 200 else None
+    
+    async def close(self):
+        """Close the client and cleanup connections."""
+        if self._client:
+            await self._client.aclose()
+            self._client = None
+```
+
+## Best Practices
+
+### Client Design
+
+- Keep clients focused on transport and low-level operations
+- Implement connection management in load() and close()
+- Use connection pooling for high-throughput scenarios
+- Handle authentication in load() method
+
+### HTTP Operations
+
+- Use client-level headers for authentication
+- Use method-level headers for request-specific settings
+- Configure appropriate timeouts
+- Use retry logic for unreliable services
+
+### Error Handling
+
+- Return None on errors for graceful degradation
+- Log errors with appropriate context
+- Close connections in finally blocks
+- Implement close() method for cleanup
+
+### Performance
+
+- Reuse client instances
+- Use connection pooling
+- Configure appropriate timeouts
+- Consider async context managers for resource management

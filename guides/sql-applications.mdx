@@ -1,0 +1,518 @@
+---
+title: Building SQL Applications
+description: Learn how to build SQL applications that extract metadata from databases
+icon: database
+---
+
+The Application SDK provides a robust framework for building SQL applications that interact with databases to extract, process, and store metadata. This guide demonstrates how to leverage the SDK's default implementations while maintaining the flexibility to customize behavior for your specific needs.
+
+## Overview
+
+An SQL application built with the SDK follows a "batteries included but swappable" philosophy - it provides sensible defaults for common tasks while allowing customization at every level.
+
+<Steps>
+  <Step title="Connect">
+    Securely connects to SQL databases using various authentication methods (basic, IAM user, IAM role).
+  </Step>
+  
+  <Step title="Extract">
+    Fetches metadata (schemas, tables, columns, procedures, etc.) using configurable SQL queries.
+  </Step>
+  
+  <Step title="Validate">
+    Performs preflight checks and validates extracted metadata to ensure data quality.
+  </Step>
+  
+  <Step title="Transform">
+    Converts the extracted metadata into a standardized format (e.g., Atlas entities).
+  </Step>
+  
+  <Step title="Store">
+    Saves the processed metadata to a configured object store for further processing.
+  </Step>
+  
+  <Step title="Orchestrate">
+    Manages the entire process using Temporal workflows for reliability and scalability.
+  </Step>
+</Steps>
+
+## Core Components
+
+The SDK's SQL metadata extraction workflow relies on three main customizable components:
+
+<CardGroup cols={3}>
+  <Card title="SQL Client" icon="plug">
+    **BaseSQLClient**
+    
+    Handles database connectivity and query execution.
+    
+    Extend to support different SQL dialects, connection string formats, or custom authentication logic.
+  </Card>
+  
+  <Card title="Activities" icon="bolt">
+    **BaseSQLMetadataExtractionActivities**
+    
+    Defines SQL queries for extracting metadata (databases, schemas, tables, columns, etc.).
+    
+    Override specific query attributes to tailor metadata extraction for your database.
+  </Card>
+  
+  <Card title="Handler" icon="wand-magic-sparkles">
+    **BaseSQLHandler**
+    
+    Manages database-specific validation logic and helper methods.
+    
+    Extend to implement custom validation checks or database-specific logic.
+  </Card>
+</CardGroup>
+
+<Note>
+These components work together within the `BaseSQLMetadataExtractionWorkflow`, orchestrated by a `Worker`.
+</Note>
+
+## Quick Start: Using Defaults
+
+You can quickly get started by using the default implementations provided by the SDK:
+
+<Steps>
+  <Step title="Get Workflow Client">
+    Initialize the workflow client that connects to your Temporal instance.
+  </Step>
+  
+  <Step title="Create Activities">
+    Instantiate the default activities, optionally providing custom SQL client or handler classes.
+  </Step>
+  
+  <Step title="Set Up Worker">
+    Create a Worker instance with the workflow class and activities.
+  </Step>
+  
+  <Step title="Configure Workflow">
+    Define workflow arguments with credentials and configuration.
+  </Step>
+  
+  <Step title="Start Execution">
+    Start the workflow and the worker.
+  </Step>
+</Steps>
+
+## Customization Examples
+
+While the defaults are powerful, you'll often need to customize components for specific databases or requirements.
+
+### Custom SQL Client
+
+Extend `BaseSQLClient` to define connection parameters specific to your database:
+
+```python
+from application_sdk.clients.sql import BaseSQLClient
+from application_sdk.clients.models import DatabaseConfig
+
+class SQLClient(BaseSQLClient):
+    # Define connection string template and required parameters for PostgreSQL
+    DB_CONFIG = DatabaseConfig(
+        template="postgresql+psycopg://{username}:{password}@{host}:{port}/{database}",
+        required=["username", "password", "host", "port", "database"],
+    )
+```
+
+<Tip>
+The connection string template uses placeholders that will be filled from the credentials provided in `workflow_args`.
+</Tip>
+
+### Custom Activities
+
+Extend `BaseSQLMetadataExtractionActivities` to provide custom SQL queries for metadata extraction:
+
+<CodeGroup>
+```python Database Query
+class SampleSQLActivities(BaseSQLMetadataExtractionActivities):
+    # Customize database metadata query for PostgreSQL
+    fetch_database_sql = """
+    SELECT datname as database_name 
+    FROM pg_database 
+    WHERE datname = current_database();
+    """
+```
+
+```python Schema Query
+class SampleSQLActivities(BaseSQLMetadataExtractionActivities):
+    # Customize schema metadata query for PostgreSQL
+    fetch_schema_sql = """
+    SELECT s.*
+    FROM information_schema.schemata s
+    WHERE s.schema_name NOT LIKE 'pg_%'
+        AND s.schema_name != 'information_schema'
+        AND concat(s.CATALOG_NAME, concat('.', s.SCHEMA_NAME)) !~ '{normalized_exclude_regex}'
+        AND concat(s.CATALOG_NAME, concat('.', s.SCHEMA_NAME)) ~ '{normalized_include_regex}';
+    """
+```
+
+```python Table Query
+class SampleSQLActivities(BaseSQLMetadataExtractionActivities):
+    # Customize table metadata query
+    fetch_table_sql = """
+    SELECT t.*
+    FROM information_schema.tables t
+    WHERE concat(current_database(), concat('.', t.table_schema)) !~ '{normalized_exclude_regex}'
+        AND concat(current_database(), concat('.', t.table_schema)) ~ '{normalized_include_regex}'
+        {temp_table_regex_sql};
+    """
+    
+    # SQL snippet for excluding temporary tables
+    extract_temp_table_regex_table_sql = "AND t.table_name !~ '{exclude_table_regex}'"
+```
+
+```python Column Query
+class SampleSQLActivities(BaseSQLMetadataExtractionActivities):
+    # Customize column metadata query
+    fetch_column_sql = """
+    SELECT c.*
+    FROM information_schema.columns c
+    WHERE concat(current_database(), concat('.', c.table_schema)) !~ '{normalized_exclude_regex}'
+        AND concat(current_database(), concat('.', c.table_schema)) ~ '{normalized_include_regex}'
+        {temp_table_regex_sql};
+    """
+    
+    extract_temp_table_regex_column_sql = "AND c.table_name !~ '{exclude_table_regex}'"
+```
+</CodeGroup>
+
+<Note>
+The queries use template variables like `{normalized_exclude_regex}` and `{normalized_include_regex}` which are filled at runtime from the workflow configuration.
+</Note>
+
+### Custom Handler
+
+Extend `BaseSQLHandler` to implement custom validation logic:
+
+```python
+from application_sdk.handlers.sql import BaseSQLHandler
+
+class SampleSQLWorkflowHandler(BaseSQLHandler):
+    # Customize query to check table count (used in preflight checks)
+    tables_check_sql = """
+    SELECT count(*)
+    FROM INFORMATION_SCHEMA.TABLES t
+    WHERE concat(TABLE_CATALOG, concat('.', TABLE_SCHEMA)) !~ '{normalized_exclude_regex}'
+        AND concat(TABLE_CATALOG, concat('.', TABLE_SCHEMA)) ~ '{normalized_include_regex}'
+        AND TABLE_SCHEMA NOT IN ('performance_schema', 'information_schema', 'pg_catalog', 'pg_internal')
+        {temp_table_regex_sql};
+    """
+    
+    temp_table_regex_sql = "AND t.table_name !~ '{exclude_table_regex}'"
+    
+    # Customize query to fetch basic schema/catalog info
+    metadata_sql = """
+    SELECT schema_name, catalog_name
+    FROM INFORMATION_SCHEMA.SCHEMATA
+    WHERE schema_name NOT LIKE 'pg_%' 
+        AND schema_name != 'information_schema'
+    """
+```
+
+## Complete Application Example
+
+Here's how to integrate custom components into a complete application:
+
+```python
+import asyncio
+import os
+import time
+from typing import Any, Dict
+
+from application_sdk.activities.metadata_extraction.sql import (
+    BaseSQLMetadataExtractionActivities,
+)
+from application_sdk.application.metadata_extraction.sql import (
+    BaseSQLMetadataExtractionApplication,
+)
+from application_sdk.clients.models import DatabaseConfig
+from application_sdk.clients.sql import BaseSQLClient
+from application_sdk.handlers.sql import BaseSQLHandler
+from application_sdk.observability.logger_adaptor import get_logger
+from application_sdk.workflows.metadata_extraction.sql import (
+    BaseSQLMetadataExtractionWorkflow,
+)
+
+APPLICATION_NAME = "postgres-app-example"
+logger = get_logger(__name__)
+
+# Define custom components
+class SQLClient(BaseSQLClient):
+    DB_CONFIG = DatabaseConfig(
+        template="postgresql+psycopg://{username}:{password}@{host}:{port}/{database}",
+        required=["username", "password", "host", "port", "database"],
+    )
+
+class SampleSQLActivities(BaseSQLMetadataExtractionActivities):
+    fetch_database_sql = "SELECT datname as database_name FROM pg_database WHERE datname = current_database();"
+    fetch_schema_sql = "SELECT s.* FROM information_schema.schemata s WHERE s.schema_name NOT LIKE 'pg_%' AND s.schema_name != 'information_schema' AND concat(s.CATALOG_NAME, concat('.', s.SCHEMA_NAME)) !~ '{normalized_exclude_regex}' AND concat(s.CATALOG_NAME, concat('.', s.SCHEMA_NAME)) ~ '{normalized_include_regex}';"
+    fetch_table_sql = "SELECT t.* FROM information_schema.tables t WHERE concat(current_database(), concat('.', t.table_schema)) !~ '{normalized_exclude_regex}' AND concat(current_database(), concat('.', t.table_schema)) ~ '{normalized_include_regex}' {temp_table_regex_sql};"
+    extract_temp_table_regex_table_sql = "AND t.table_name !~ '{exclude_table_regex}'"
+    fetch_column_sql = "SELECT c.* FROM information_schema.columns c WHERE concat(current_database(), concat('.', c.table_schema)) !~ '{normalized_exclude_regex}' AND concat(current_database(), concat('.', c.table_schema)) ~ '{normalized_include_regex}' {temp_table_regex_sql};"
+    extract_temp_table_regex_column_sql = "AND c.table_name !~ '{exclude_table_regex}'"
+
+class SampleSQLWorkflowHandler(BaseSQLHandler):
+    tables_check_sql = "SELECT count(*) FROM INFORMATION_SCHEMA.TABLES t WHERE concat(TABLE_CATALOG, concat('.', TABLE_SCHEMA)) !~ '{normalized_exclude_regex}' AND concat(TABLE_CATALOG, concat('.', TABLE_SCHEMA)) ~ '{normalized_include_regex}' AND TABLE_SCHEMA NOT IN ('performance_schema', 'information_schema', 'pg_catalog', 'pg_internal') {temp_table_regex_sql};"
+    temp_table_regex_sql = "AND t.table_name !~ '{exclude_table_regex}'"
+    metadata_sql = "SELECT schema_name, catalog_name FROM INFORMATION_SCHEMA.SCHEMATA WHERE schema_name NOT LIKE 'pg_%' AND schema_name != 'information_schema'"
+
+async def run_sql_application(daemon: bool = True) -> Dict[str, Any]:
+    """Sets up and runs the SQL metadata extraction workflow."""
+    logger.info(f"Starting SQL application: {APPLICATION_NAME}")
+    
+    # Initialize application with custom components
+    app = BaseSQLMetadataExtractionApplication(
+        name=APPLICATION_NAME,
+        client_class=SQLClient,
+        handler_class=SampleSQLWorkflowHandler,
+    )
+    
+    # Set up workflow and activities
+    await app.setup_workflow(
+        workflow_and_activities_classes=[
+            (BaseSQLMetadataExtractionWorkflow, SampleSQLActivities)
+        ]
+    )
+    
+    time.sleep(3)  # Wait for worker to initialize
+    
+    # Configure workflow arguments
+    workflow_args = {
+        "credentials": {
+            "authType": "basic",
+            "host": os.getenv("POSTGRES_HOST", "localhost"),
+            "port": os.getenv("POSTGRES_PORT", "5432"),
+            "username": os.getenv("POSTGRES_USER", "postgres"),
+            "password": os.getenv("POSTGRES_PASSWORD", "password"),
+            "database": os.getenv("POSTGRES_DATABASE", "postgres"),
+        },
+        "connection": {
+            "connection_name": "test-postgres-connection",
+            "connection_qualified_name": f"default/postgres/{int(time.time())}",
+        },
+        "metadata": {
+            "exclude-filter": "{}",
+            "include-filter": "{}",
+            "temp-table-regex": "^temp_",
+            "extraction-method": "direct",
+            "exclude_views": "false",
+            "exclude_empty_tables": "false",
+        },
+        "tenant_id": os.getenv("ATLAN_TENANT_ID", "default"),
+    }
+    
+    # Start workflow execution
+    logger.info(f"Starting workflow with args: {workflow_args}")
+    workflow_response = await app.start_workflow(workflow_args=workflow_args)
+    logger.info(f"Workflow started: {workflow_response}")
+    
+    # Start the worker
+    logger.info(f"Starting worker (daemon={daemon})...")
+    await app.start_worker(daemon=daemon)
+    
+    return workflow_response
+
+if __name__ == "__main__":
+    asyncio.run(run_sql_application(daemon=False))
+```
+
+<Warning>
+Never commit credentials directly in code. Always load sensitive values from environment variables or secret stores.
+</Warning>
+
+## Configuration Details
+
+The `workflow_args` dictionary controls the workflow's behavior:
+
+### Credentials Section
+
+<ParamField path="credentials.authType" type="string" required>
+  Authentication type: `basic`, `iam_user`, or `iam_role`
+</ParamField>
+
+<ParamField path="credentials.host" type="string" required>
+  Database host address
+</ParamField>
+
+<ParamField path="credentials.port" type="string" required>
+  Database port number
+</ParamField>
+
+<ParamField path="credentials.username" type="string" required>
+  Database username
+</ParamField>
+
+<ParamField path="credentials.password" type="string" required>
+  Database password (for basic auth)
+</ParamField>
+
+<ParamField path="credentials.database" type="string" required>
+  Database name to connect to
+</ParamField>
+
+### Connection Section
+
+<ParamField path="connection.connection_name" type="string" required>
+  Human-readable connection name in Atlan
+</ParamField>
+
+<ParamField path="connection.connection_qualified_name" type="string" required>
+  Unique qualified name for the connection (format: `tenant/connector/timestamp`)
+</ParamField>
+
+### Metadata Section
+
+<ParamField path="metadata.include-filter" type="string" default="{}">
+  JSON string containing regex patterns to include schemas/tables
+</ParamField>
+
+<ParamField path="metadata.exclude-filter" type="string" default="{}">
+  JSON string containing regex patterns to exclude schemas/tables
+</ParamField>
+
+<ParamField path="metadata.temp-table-regex" type="string">
+  Regex pattern to identify temporary tables for exclusion
+</ParamField>
+
+<ParamField path="metadata.extraction-method" type="string" default="direct">
+  Extraction method (typically "direct")
+</ParamField>
+
+<ParamField path="metadata.exclude_views" type="string" default="false">
+  Boolean string ("true"/"false") to skip views
+</ParamField>
+
+<ParamField path="metadata.exclude_empty_tables" type="string" default="false">
+  Boolean string to skip tables with zero rows
+</ParamField>
+
+### Optional Parameters
+
+<ParamField path="workflow_id" type="string">
+  Existing workflow ID for reruns
+</ParamField>
+
+<ParamField path="cron_schedule" type="string">
+  Cron expression for scheduled execution (e.g., "0 1 * * *" for daily at 1 AM)
+</ParamField>
+
+<ParamField path="tenant_id" type="string" required>
+  Atlan tenant ID
+</ParamField>
+
+## Advanced Features
+
+### Scheduled Execution
+
+Run workflows automatically by adding a cron schedule:
+
+```python
+workflow_args["cron_schedule"] = "0 1 * * *"  # Run daily at 1 AM
+```
+
+<Tip>
+Use [crontab.guru](https://crontab.guru/) to build and validate cron expressions.
+</Tip>
+
+### Workflow Rerun
+
+Resume or rerun a specific workflow execution:
+
+```python
+workflow_args["workflow_id"] = "your-previous-workflow_id"
+```
+
+### Custom Authentication
+
+The `BaseSQLClient` supports different authentication types:
+
+<Tabs>
+  <Tab title="Basic Auth">
+    ```python
+    "credentials": {
+        "authType": "basic",
+        "username": "db_user",
+        "password": "db_pass",
+        # ... other connection details
+    }
+    ```
+  </Tab>
+  
+  <Tab title="IAM User">
+    ```python
+    "credentials": {
+        "authType": "iam_user",
+        "username": "db_user",
+        "access-key-id": "AWS_ACCESS_KEY",
+        "secret-access-key": "AWS_SECRET_KEY",
+        # ... other connection details
+    }
+    ```
+  </Tab>
+  
+  <Tab title="IAM Role">
+    ```python
+    "credentials": {
+        "authType": "iam_role",
+        "username": "db_user",
+        "role-arn": "arn:aws:iam::account:role/RoleName",
+        "external-id": "optional-external-id",
+        # ... other connection details
+    }
+    ```
+  </Tab>
+</Tabs>
+
+<Note>
+You can extend `BaseSQLClient` to add support for other authentication mechanisms.
+</Note>
+
+## Best Practices
+
+<AccordionGroup>
+  <Accordion title="Configuration Management" icon="gear">
+    Load sensitive credentials from environment variables or secure stores, not directly in code. Use the constants defined in `application_sdk.constants`.
+  </Accordion>
+  
+  <Accordion title="Error Handling" icon="circle-exclamation">
+    Implement `try...except` blocks in custom code (especially within Activities or Handlers) to handle potential database errors or unexpected data.
+  </Accordion>
+  
+  <Accordion title="Logging" icon="file-lines">
+    Use the SDK's logger (`application_sdk.observability.logger_adaptor.get_logger`) for consistent and structured logging integrated with Temporal.
+  </Accordion>
+  
+  <Accordion title="Idempotency" icon="rotate">
+    Design activities to be idempotent where possible, meaning they can be run multiple times with the same result. Temporal handles retries, but idempotent activities simplify recovery.
+  </Accordion>
+  
+  <Accordion title="Testing" icon="flask">
+    Write unit tests for your custom Client, Activities, and Handler classes. The SDK provides testing utilities in `application_sdk.test_utils`.
+  </Accordion>
+  
+  <Accordion title="Resource Management" icon="server">
+    Ensure database connections are properly closed. The SDK's client and workflow management generally handle this, but be mindful in custom extensions.
+  </Accordion>
+</AccordionGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="PostgreSQL Example" icon="github" href="https://github.com/atlanhq/atlan-postgres-app">
+    Explore a complete, production-ready PostgreSQL application.
+  </Card>
+  
+  <Card title="Testing Guide" icon="flask" href="/guides/testing">
+    Learn how to test your SQL applications comprehensively.
+  </Card>
+  
+  <Card title="Best Practices" icon="star" href="/guides/best-practices">
+    Follow best practices for scalability and reliability.
+  </Card>
+  
+  <Card title="Secret Stores" icon="key" href="/guides/secret-stores">
+    Secure credential management with secret stores.
+  </Card>
+</CardGroup>

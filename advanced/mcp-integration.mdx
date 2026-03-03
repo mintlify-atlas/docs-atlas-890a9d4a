@@ -1,0 +1,480 @@
+---
+title: "MCP Integration"
+description: "Advanced Model Context Protocol integration for AI-powered workflows"
+icon: "plug"
+---
+
+## Overview
+
+The Application SDK provides deep integration with the **Model Context Protocol (MCP)**, enabling your Temporal workflows and activities to be exposed as AI tools that can be discovered and invoked by AI assistants like Claude Desktop, Claude Code, Cursor, and other MCP-compatible clients.
+
+<Note>
+MCP integration is optional. Install the `mcp` extras group to enable it:
+```bash
+uv sync --all-extras --all-groups
+```
+</Note>
+
+## Architecture
+
+The MCP integration consists of three main components:
+
+<Steps>
+  <Step title="@mcp_tool Decorator">
+    Mark activities for automatic exposure as MCP tools
+  </Step>
+  <Step title="MCPServer">
+    FastMCP-based server that discovers decorated activities and registers them
+  </Step>
+  <Step title="HTTP Transport">
+    Streamable HTTP transport mounted on your FastAPI application
+  </Step>
+</Steps>
+
+### Component Details
+
+<CardGroup cols={2}>
+  <Card title="Decorator" icon="at">
+    The `@mcp_tool` decorator adds metadata to activity methods, marking them for MCP exposure
+  </Card>
+  <Card title="Server" icon="server">
+    The `MCPServer` class discovers marked activities and creates FastMCP tool registrations
+  </Card>
+  <Card title="Transport" icon="network-wired">
+    Uses FastMCP 2.0's streamable HTTP transport for compatibility with modern MCP clients
+  </Card>
+  <Card title="Discovery" icon="magnifying-glass">
+    Automatic discovery happens at application startup by scanning workflow activity lists
+  </Card>
+</CardGroup>
+
+## Marking Activities as Tools
+
+### Basic Usage
+
+Use the `@mcp_tool` decorator to expose activities:
+
+```python application_sdk/decorators/mcp_tool.py
+from application_sdk.decorators.mcp_tool import mcp_tool
+from application_sdk.activities import ActivitiesInterface
+from temporalio import activity
+
+class MyActivities(ActivitiesInterface):
+    @activity.defn
+    @mcp_tool(
+        name="fetch_user_data",
+        description="Retrieve user data from the database by user ID"
+    )
+    async def fetch_user_data(self, user_id: str) -> dict:
+        """Fetch user data for the given user ID."""
+        # Your activity implementation
+        return {"user_id": user_id, "name": "John Doe", "email": "john@example.com"}
+```
+
+<Warning>
+The order matters: `@activity.defn` should be the outermost decorator, with `@mcp_tool` below it.
+</Warning>
+
+### Decorator Parameters
+
+The `@mcp_tool` decorator accepts the following parameters:
+
+<ParamField path="name" type="str" optional>
+  Custom name for the tool. Defaults to the function name.
+</ParamField>
+
+<ParamField path="description" type="str" optional>
+  Description shown to AI assistants. Defaults to the function's docstring.
+</ParamField>
+
+<ParamField path="visible" type="bool" default="true">
+  Whether to expose this tool at runtime. Set to `False` to conditionally hide tools.
+</ParamField>
+
+### Advanced Example with Pydantic Models
+
+```python
+from pydantic import BaseModel, Field
+from application_sdk.decorators.mcp_tool import mcp_tool
+from temporalio import activity
+
+class QueryParameters(BaseModel):
+    """Parameters for database query."""
+    table_name: str = Field(description="Name of the table to query")
+    filters: dict = Field(default={}, description="Filter conditions")
+    limit: int = Field(default=100, description="Maximum number of results")
+
+class MyActivities(ActivitiesInterface):
+    @activity.defn
+    @mcp_tool(
+        name="query_database",
+        description="Execute a parameterized database query with filters and limits"
+    )
+    async def query_database(self, params: QueryParameters) -> list:
+        """Query the database with structured parameters.
+        
+        The Pydantic model is automatically flattened into individual parameters
+        that the AI assistant can understand and provide values for.
+        """
+        # Implementation
+        results = await self.db_client.query(
+            params.table_name,
+            filters=params.filters,
+            limit=params.limit
+        )
+        return results
+```
+
+<Info>
+Pydantic models are automatically converted into JSON schema by FastMCP. The AI assistant will see the individual fields with their descriptions and types.
+</Info>
+
+## Server Implementation
+
+The `MCPServer` class handles automatic discovery and registration:
+
+```python application_sdk/server/mcp/server.py
+from application_sdk.server.mcp.server import MCPServer
+from fastapi import FastAPI
+
+class MyApplication:
+    def __init__(self):
+        self.mcp_server = MCPServer(
+            application_name="data-processor",
+            instructions="Tools for processing and analyzing data"
+        )
+    
+    async def setup(self, workflow_and_activities_classes):
+        """Register MCP tools from workflow activities."""
+        await self.mcp_server.register_tools(workflow_and_activities_classes)
+        
+        # Get the MCP HTTP app
+        mcp_app = await self.mcp_server.get_http_app()
+        
+        # Mount on FastAPI
+        app = FastAPI()
+        app.mount("/mcp", mcp_app)
+        
+        return app
+```
+
+### Discovery Process
+
+The server discovers tools through the following process:
+
+<Steps>
+  <Step title="Iterate Workflows">
+    Loop through all registered workflow and activities class pairs
+  </Step>
+  <Step title="Extract Activities">
+    Call `workflow_class.get_activities()` to get all activity methods
+  </Step>
+  <Step title="Check Metadata">
+    Look for the `MCP_METADATA_KEY` attribute on each method
+  </Step>
+  <Step title="Register Tools">
+    For methods with metadata and `visible=True`, register them with FastMCP
+  </Step>
+</Steps>
+
+### Metadata Structure
+
+The metadata attached by `@mcp_tool` is defined by the `MCPMetadata` model:
+
+```python application_sdk/server/mcp/models.py
+from pydantic import BaseModel
+from typing import Any, Dict, Optional, Tuple
+
+class MCPMetadata(BaseModel):
+    name: str
+    description: Optional[str]
+    visible: bool
+    args: Tuple[Any, ...] = ()
+    kwargs: Dict[str, Any] = {}
+```
+
+## Configuration
+
+### Environment Variables
+
+Control MCP behavior with environment variables:
+
+```bash .env
+# Enable MCP server
+ENABLE_MCP=true
+
+# Application name (used for MCP server naming)
+ATLAN_APPLICATION_NAME=my-data-processor
+```
+
+### Conditional Tool Exposure
+
+You can conditionally expose tools based on environment or configuration:
+
+```python
+import os
+from application_sdk.decorators.mcp_tool import mcp_tool
+
+class MyActivities(ActivitiesInterface):
+    @activity.defn
+    @mcp_tool(
+        name="admin_operation",
+        description="Administrative operation - restricted",
+        visible=os.getenv("ENABLE_ADMIN_TOOLS", "false") == "true"
+    )
+    async def admin_operation(self, action: str) -> dict:
+        """Perform administrative action."""
+        return {"status": "completed", "action": action}
+```
+
+## AI Client Configuration
+
+### Claude Desktop
+
+Add your application to Claude Desktop's configuration file:
+
+<CodeGroup>
+```json macOS
+{
+  "mcpServers": {
+    "My Atlan App": {
+      "command": "npx",
+      "args": ["mcp-remote", "http://localhost:8000/mcp"]
+    }
+  }
+}
+```
+
+```json Windows
+{
+  "mcpServers": {
+    "My Atlan App": {
+      "command": "npx.cmd",
+      "args": ["mcp-remote", "http://localhost:8000/mcp"]
+    }
+  }
+}
+```
+</CodeGroup>
+
+<Info>
+Configuration file locations:
+- macOS: `~/Library/Application Support/Claude/claude_desktop_config.json`
+- Windows: `%APPDATA%\Claude\claude_desktop_config.json`
+</Info>
+
+### Other MCP Clients
+
+For clients supporting streamable HTTP transport directly:
+
+```yaml client-config.yaml
+servers:
+  my-atlan-app:
+    url: http://localhost:8000/mcp
+    transport: streamable_http
+```
+
+## Testing and Debugging
+
+### MCP Inspector
+
+Use the MCP Inspector to test your tools:
+
+<Steps>
+  <Step title="Start Your Application">
+    ```bash
+    python main.py
+    ```
+  </Step>
+  <Step title="Open MCP Inspector">
+    Navigate to the [MCP Inspector](https://modelcontextprotocol.io/legacy/tools/inspector)
+  </Step>
+  <Step title="Configure Connection">
+    - URL: `http://localhost:8000/mcp`
+    - Transport: `streamable_http`
+  </Step>
+  <Step title="Test Tools">
+    Browse available tools and test them interactively
+  </Step>
+</Steps>
+
+### Logging
+
+The MCP server provides detailed logging during tool registration:
+
+```python
+# Enable debug logging
+import logging
+logging.getLogger("application_sdk.server.mcp").setLevel(logging.DEBUG)
+```
+
+You'll see logs like:
+```
+INFO: Registering tool fetch_user_data with description: Retrieve user data...
+INFO: Registered 5 tools: ['fetch_user_data', 'query_database', ...]
+```
+
+## Best Practices
+
+<AccordionGroup>
+  <Accordion title="Write Clear Descriptions">
+    AI assistants rely on descriptions to understand when and how to use tools. Be explicit about:
+    - What the tool does
+    - What inputs it expects
+    - What outputs it returns
+    - Any preconditions or constraints
+    
+    ```python
+    @mcp_tool(
+        description="Fetch user profile data by user ID. Returns name, email, and account status. Requires valid user_id string."
+    )
+    async def fetch_user_data(self, user_id: str) -> dict:
+        ...
+    ```
+  </Accordion>
+  
+  <Accordion title="Use Type Hints">
+    Type hints help generate accurate JSON schemas:
+    
+    ```python
+    # Good - clear types
+    async def process_data(self, count: int, filters: dict[str, str]) -> list[str]:
+        ...
+    
+    # Better - use Pydantic for complex types
+    async def process_data(self, params: ProcessingParams) -> ProcessingResult:
+        ...
+    ```
+  </Accordion>
+  
+  <Accordion title="Handle Errors Gracefully">
+    Return user-friendly error messages that AI assistants can understand:
+    
+    ```python
+    @mcp_tool(description="Fetch data from external API")
+    async def fetch_external_data(self, api_key: str) -> dict:
+        try:
+            return await self.api_client.fetch(api_key)
+        except UnauthorizedError:
+            return {"error": "Invalid API key. Please check credentials."}
+        except TimeoutError:
+            return {"error": "API request timed out. Please try again."}
+    ```
+  </Accordion>
+  
+  <Accordion title="Keep Tools Focused">
+    Each tool should do one thing well. Split complex operations:
+    
+    ```python
+    # Instead of one complex tool
+    @mcp_tool(description="Fetch, process, and export data")
+    async def do_everything(self, ...): ...
+    
+    # Use multiple focused tools
+    @mcp_tool(description="Fetch raw data from source")
+    async def fetch_data(self, source: str) -> dict: ...
+    
+    @mcp_tool(description="Process and transform data")
+    async def process_data(self, data: dict) -> dict: ...
+    
+    @mcp_tool(description="Export data to destination")
+    async def export_data(self, data: dict, destination: str) -> str: ...
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Advanced Patterns
+
+### Dynamic Tool Configuration
+
+Load tool configurations from external sources:
+
+```python
+from application_sdk.services.statestore import StateStore
+
+class MyActivities(ActivitiesInterface):
+    async def get_tool_config(self, tool_name: str) -> dict:
+        """Load tool configuration from state store."""
+        config = await StateStore.get_state(
+            key=f"mcp_tool_config_{tool_name}",
+            id="config",
+            type=StateType.ACTIVITY
+        )
+        return config or {"visible": True}
+    
+    @activity.defn
+    @mcp_tool(
+        name="configurable_tool",
+        description="Tool with dynamic configuration"
+    )
+    async def configurable_tool(self, params: dict) -> dict:
+        config = await self.get_tool_config("configurable_tool")
+        # Use config to modify behavior
+        return await self.execute_with_config(params, config)
+```
+
+### Tool Composition
+
+Compose complex workflows from simple tools:
+
+```python
+class MyActivities(ActivitiesInterface):
+    @mcp_tool(description="Fetch user data")
+    async def fetch_user(self, user_id: str) -> dict:
+        return await self.db.get_user(user_id)
+    
+    @mcp_tool(description="Fetch user orders")
+    async def fetch_orders(self, user_id: str) -> list:
+        return await self.db.get_orders(user_id)
+    
+    @mcp_tool(description="Get complete user profile with orders")
+    async def get_full_profile(self, user_id: str) -> dict:
+        """Composite tool that uses other tools."""
+        user = await self.fetch_user(user_id)
+        orders = await self.fetch_orders(user_id)
+        return {"user": user, "orders": orders}
+```
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Tools Not Appearing in AI Client">
+    1. Check that `ENABLE_MCP=true` is set
+    2. Verify `@mcp_tool` decorator is applied correctly
+    3. Ensure `visible=True` (default)
+    4. Check server logs for registration messages
+    5. Restart your AI client after configuration changes
+  </Accordion>
+  
+  <Accordion title="Parameter Schema Issues">
+    If AI assistants are confused about parameters:
+    1. Use Pydantic models with clear field descriptions
+    2. Add type hints to all parameters
+    3. Provide default values where appropriate
+    4. Test with MCP Inspector to see the generated schema
+  </Accordion>
+  
+  <Accordion title="Connection Errors">
+    1. Verify your application is running and accessible
+    2. Check firewall settings for port 8000
+    3. Test the endpoint: `curl http://localhost:8000/mcp`
+    4. Ensure no other service is using port 8000
+  </Accordion>
+</AccordionGroup>
+
+## Related Topics
+
+<CardGroup cols={2}>
+  <Card title="Activities" icon="bolt" href="/core/activities">
+    Learn about creating activities
+  </Card>
+  <Card title="Workflows" icon="diagram-project" href="/core/workflows">
+    Understand workflow orchestration
+  </Card>
+  <Card title="Monitoring" icon="chart-line" href="/advanced/monitoring">
+    Monitor MCP tool usage
+  </Card>
+  <Card title="Temporal Auth" icon="lock" href="/advanced/temporal-auth">
+    Secure your workflows
+  </Card>
+</CardGroup>

@@ -1,0 +1,423 @@
+---
+title: EventStore
+description: Event publishing and management service
+---
+
+The EventStore service provides event publishing capabilities with automatic metadata enrichment and lifecycle event tracking.
+
+## EventStore
+
+`application_sdk.services.eventstore.EventStore`
+
+Unified event store service for publishing application events.
+
+### Class Methods
+
+#### publish_event
+
+Publish event with automatic metadata enrichment and authentication.
+
+```python
+from application_sdk.services.eventstore import EventStore
+from application_sdk.interceptors.models import Event
+
+await EventStore.publish_event(event: Event)
+```
+
+<ParamField path="event" type="Event" required>
+  Event data to publish
+</ParamField>
+
+<ResponseField name="behavior" type="Description">
+  - Automatically enriches event with workflow and activity context
+  - Injects authentication headers
+  - Validates component availability
+  - Sends lifecycle events to Segment
+  - Silently skips if event store component is not registered
+</ResponseField>
+
+<ResponseField name="raises" type="Exception">
+  Errors are logged but not re-raised to prevent disruption
+</ResponseField>
+
+#### enrich_event_metadata
+
+Enrich the event metadata with workflow and activity context information.
+
+```python
+enriched_event = EventStore.enrich_event_metadata(event: Event)
+```
+
+<ParamField path="event" type="Event" required>
+  Event data to enrich with metadata
+</ParamField>
+
+<ResponseField name="return" type="Event">
+  The same event instance with enriched metadata including:
+  - application_name
+  - created_timestamp
+  - topic_name
+  - workflow_type, workflow_id, workflow_run_id (if in workflow context)
+  - activity_type, activity_id, attempt (if in activity context)
+</ResponseField>
+
+<Note>
+  This method safely handles cases where the code is not running within a Temporal workflow or activity context.
+</Note>
+
+## Event Models
+
+### Event
+
+`application_sdk.interceptors.models.Event`
+
+Base event model for application events.
+
+#### Attributes
+
+<ResponseField name="event_type" type="str" required>
+  The type of event (e.g., "workflow.started", "data.processed")
+</ResponseField>
+
+<ResponseField name="event_name" type="str">
+  Human-readable event name
+</ResponseField>
+
+<ResponseField name="data" type="Dict[str, Any]">
+  Event payload data
+</ResponseField>
+
+<ResponseField name="metadata" type="EventMetadata">
+  Event metadata including workflow and activity context
+</ResponseField>
+
+#### Methods
+
+```python
+topic_name = event.get_topic_name()
+```
+
+Get the topic name for the event based on event_type.
+
+### EventMetadata
+
+`application_sdk.interceptors.models.EventMetadata`
+
+Metadata for events including execution context.
+
+<ResponseField name="application_name" type="str">
+  Name of the application
+</ResponseField>
+
+<ResponseField name="created_timestamp" type="int">
+  Unix timestamp when the event was created
+</ResponseField>
+
+<ResponseField name="topic_name" type="str">
+  Topic name for the event
+</ResponseField>
+
+<ResponseField name="workflow_type" type="str">
+  Type of workflow (if in workflow context)
+</ResponseField>
+
+<ResponseField name="workflow_id" type="str">
+  Workflow identifier (if in workflow context)
+</ResponseField>
+
+<ResponseField name="workflow_run_id" type="str">
+  Workflow run identifier (if in workflow context)
+</ResponseField>
+
+<ResponseField name="workflow_state" type="str">
+  Current workflow state (if in workflow context)
+</ResponseField>
+
+<ResponseField name="activity_type" type="str">
+  Type of activity (if in activity context)
+</ResponseField>
+
+<ResponseField name="activity_id" type="str">
+  Activity identifier (if in activity context)
+</ResponseField>
+
+<ResponseField name="attempt" type="int">
+  Activity attempt number (if in activity context)
+</ResponseField>
+
+## Example Usage
+
+### Basic Event Publishing
+
+```python
+from application_sdk.services.eventstore import EventStore
+from application_sdk.interceptors.models import Event
+
+# Create and publish event
+event = Event(
+    event_type="data.processed",
+    event_name="DataProcessed",
+    data={
+        "batch_id": "batch-123",
+        "records_count": 1000,
+        "success_count": 995,
+        "error_count": 5
+    }
+)
+
+await EventStore.publish_event(event)
+```
+
+### Workflow Status Events
+
+```python
+from application_sdk.services.eventstore import EventStore
+from application_sdk.interceptors.models import Event
+
+# Workflow started event
+started_event = Event(
+    event_type="workflow.started",
+    event_name="WorkflowStarted",
+    data={
+        "workflow_id": "wf-123",
+        "source": "manual",
+        "user_id": "user-456"
+    }
+)
+await EventStore.publish_event(started_event)
+
+# Workflow completed event
+completed_event = Event(
+    event_type="workflow.completed",
+    event_name="WorkflowCompleted",
+    data={
+        "workflow_id": "wf-123",
+        "status": "success",
+        "duration_seconds": 1800,
+        "records_processed": 10000
+    }
+)
+await EventStore.publish_event(completed_event)
+```
+
+### Data Processing Events
+
+```python
+from application_sdk.services.eventstore import EventStore
+from application_sdk.interceptors.models import Event
+
+# Batch processing started
+batch_start = Event(
+    event_type="batch.started",
+    event_name="BatchProcessingStarted",
+    data={
+        "batch_id": "batch-456",
+        "item_count": 5000,
+        "priority": "high"
+    }
+)
+await EventStore.publish_event(batch_start)
+
+# Batch processing completed
+batch_complete = Event(
+    event_type="batch.completed",
+    event_name="BatchProcessingCompleted",
+    data={
+        "batch_id": "batch-456",
+        "processed_count": 5000,
+        "duration_ms": 45000
+    }
+)
+await EventStore.publish_event(batch_complete)
+```
+
+### Activity Events
+
+```python
+from application_sdk.activities import ActivitiesInterface
+from application_sdk.services.eventstore import EventStore
+from application_sdk.interceptors.models import Event
+from temporalio import activity
+
+class EventPublishingActivities(ActivitiesInterface):
+    
+    @activity.defn
+    async def process_data(self, workflow_args):
+        """Process data and publish events."""
+        
+        # Publish start event
+        start_event = Event(
+            event_type="activity.data_processing_started",
+            data={"source": workflow_args["source"]}
+        )
+        await EventStore.publish_event(start_event)
+        
+        try:
+            # Process data
+            result = await self._do_processing(workflow_args)
+            
+            # Publish success event
+            success_event = Event(
+                event_type="activity.data_processing_completed",
+                data={
+                    "source": workflow_args["source"],
+                    "records": result["count"]
+                }
+            )
+            await EventStore.publish_event(success_event)
+            
+            return result
+            
+        except Exception as e:
+            # Publish error event
+            error_event = Event(
+                event_type="activity.data_processing_failed",
+                data={
+                    "source": workflow_args["source"],
+                    "error": str(e)
+                }
+            )
+            await EventStore.publish_event(error_event)
+            raise
+```
+
+### Custom Event Enrichment
+
+```python
+from application_sdk.services.eventstore import EventStore
+from application_sdk.interceptors.models import Event, EventMetadata
+
+# Create event with custom metadata
+event = Event(
+    event_type="custom.action",
+    event_name="CustomAction",
+    data={"action": "data_export"},
+    metadata=EventMetadata(
+        # Custom fields will be preserved
+        custom_field="custom_value"
+    )
+)
+
+# Enrich with workflow context
+enriched = EventStore.enrich_event_metadata(event)
+
+# enriched.metadata now includes:
+# - application_name
+# - created_timestamp
+# - workflow_id, workflow_run_id (if in workflow)
+# - activity_id (if in activity)
+# - custom_field (preserved)
+
+await EventStore.publish_event(enriched)
+```
+
+### Error Event Publishing
+
+```python
+from application_sdk.services.eventstore import EventStore
+from application_sdk.interceptors.models import Event
+
+async def handle_error(error: Exception, context: dict):
+    """Publish error event."""
+    error_event = Event(
+        event_type="error.occurred",
+        event_name="ErrorOccurred",
+        data={
+            "error_type": type(error).__name__,
+            "error_message": str(error),
+            "context": context,
+            "severity": "high" if isinstance(error, CriticalError) else "medium"
+        }
+    )
+    
+    await EventStore.publish_event(error_event)
+```
+
+### Multi-Event Publishing
+
+```python
+from application_sdk.services.eventstore import EventStore
+from application_sdk.interceptors.models import Event
+import asyncio
+
+async def publish_pipeline_events(pipeline_id: str, stages: list):
+    """Publish events for all pipeline stages."""
+    events = [
+        Event(
+            event_type=f"pipeline.stage.{stage['name']}",
+            event_name=f"Stage{stage['name'].title()}",
+            data={
+                "pipeline_id": pipeline_id,
+                "stage": stage["name"],
+                "status": stage["status"]
+            }
+        )
+        for stage in stages
+    ]
+    
+    # Publish all events
+    await asyncio.gather(*[
+        EventStore.publish_event(event)
+        for event in events
+    ])
+```
+
+### Lifecycle Event Tracking
+
+```python
+from application_sdk.services.eventstore import EventStore
+from application_sdk.interceptors.models import (
+    Event,
+    ApplicationEventNames
+)
+
+# Lifecycle events are automatically sent to Segment
+
+# Workflow lifecycle
+workflow_start = Event(
+    event_name=ApplicationEventNames.WORKFLOW_START.value,
+    event_type="workflow.started",
+    data={"workflow_type": "DataProcessing"}
+)
+await EventStore.publish_event(workflow_start)
+
+# Activity lifecycle
+activity_start = Event(
+    event_name=ApplicationEventNames.ACTIVITY_START.value,
+    event_type="activity.started",
+    data={"activity_type": "ExtractData"}
+)
+await EventStore.publish_event(activity_start)
+```
+
+## Best Practices
+
+### Event Design
+
+- Use descriptive event types and names
+- Include relevant context in event data
+- Keep event payloads focused and lightweight
+- Use consistent naming conventions
+- Document custom event types
+
+### Event Publishing
+
+- Publish events at key points in workflow execution
+- Don't block on event publishing (it's async)
+- Handle publishing errors gracefully
+- Avoid publishing excessive events
+- Use appropriate event types for different scenarios
+
+### Metadata
+
+- Let automatic enrichment handle workflow/activity context
+- Add custom metadata when needed
+- Include timestamps in event data
+- Preserve correlation IDs
+
+### Performance
+
+- Event publishing is non-blocking
+- Batch related events when possible
+- Monitor event volume
+- Use appropriate event granularity

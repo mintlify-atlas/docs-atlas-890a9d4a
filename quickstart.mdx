@@ -1,80 +1,221 @@
 ---
-title: "Quickstart"
-description: "Start building awesome documentation in minutes"
+title: Quickstart
+description: Build your first application with the Atlan Application SDK in 5 minutes
 ---
 
-## Get started in three steps
+# Quickstart
 
-Get your documentation site running locally and make your first customization.
+This guide will walk you through building a simple "Hello World" application using the Atlan Application SDK. You'll learn the core concepts of workflows, activities, and the application lifecycle.
 
-### Step 1: Set up your local environment
+## Prerequisites
 
-<AccordionGroup>
-  <Accordion icon="copy" title="Clone your docs locally">
-    During the onboarding process, you created a GitHub repository with your docs content if you didn't already have one. You can find a link to this repository in your [dashboard](https://dashboard.mintlify.com).
+Before you begin, make sure you have:
+
+- Python 3.11 or higher installed
+- The Atlan Application SDK installed (see [Installation](/installation))
+
+## Build your first application
+
+<Steps>
+  <Step title="Install the SDK">
+    Install the SDK with workflow support:
     
-    To clone the repository locally so that you can make and preview changes to your docs, follow the [Cloning a repository](https://docs.github.com/en/repositories/creating-and-managing-repositories/cloning-a-repository) guide in the GitHub docs.
-  </Accordion>
-  <Accordion icon="rectangle-terminal" title="Start the preview server">
-    1. Install the Mintlify CLI: `npm i -g mint`
-    2. Navigate to your docs directory and run: `mint dev`
-    3. Open `http://localhost:3000` to see your docs live!
+    ```bash
+    pip install atlan-application-sdk[workflows]
+    ```
+  </Step>
+
+  <Step title="Create your application file">
+    Create a new file called `hello_world.py` with the following code:
     
-    <Tip>Your preview updates automatically as you edit files.</Tip>
-  </Accordion>
-</AccordionGroup>
-
-### Step 2: Deploy your changes
-
-<AccordionGroup>
-  <Accordion icon="github" title="Install our GitHub app">
-    Install the Mintlify GitHub app from your [dashboard](https://dashboard.mintlify.com/settings/organization/github-app).
+    ```python
+    import asyncio
+    from datetime import timedelta
+    from typing import Any, Callable, Dict, Sequence, cast
     
-    Our GitHub app automatically deploys your changes to your docs site, so you don't need to manage deployments yourself.
-</Accordion>
-<Accordion icon="palette" title="Update your site name and colors">
-    For a first change, let's update the name and colors of your docs site.
+    from temporalio import activity, workflow
+    
+    from application_sdk.activities import ActivitiesInterface
+    from application_sdk.activities.common.utils import auto_heartbeater
+    from application_sdk.application import BaseApplication
+    from application_sdk.observability.logger_adaptor import get_logger
+    from application_sdk.workflows import WorkflowInterface
+    
+    APPLICATION_NAME = "hello-world"
+    
+    logger = get_logger(__name__)
+    
+    
+    @workflow.defn
+    class HelloWorldWorkflow(WorkflowInterface):
+        @workflow.run
+        async def run(self, workflow_config: Dict[str, Any]) -> None:
+            activities = HelloWorldActivities()
+    
+            await workflow.execute_activity_method(
+                activities.demo_activity,
+                args=[workflow_config],
+                start_to_close_timeout=timedelta(seconds=10),
+                heartbeat_timeout=timedelta(seconds=10),
+            )
+    
+        @staticmethod
+        def get_activities(activities: ActivitiesInterface) -> Sequence[Callable[..., Any]]:
+            activities = cast(HelloWorldActivities, activities)
+            return [
+                activities.demo_activity,
+            ]
+    
+    
+    class HelloWorldActivities(ActivitiesInterface):
+        @activity.defn
+        @auto_heartbeater
+        async def demo_activity(self, workflow_args: Dict[str, Any]) -> Dict[str, Any]:
+            return {"message": "Demo activity completed successfully"}
+    
+    
+    async def application_hello_world(daemon: bool = True) -> Dict[str, Any]:
+        logger.info("Starting application_hello_world")
+    
+        # Initialize application
+        app = BaseApplication(name=APPLICATION_NAME)
+    
+        # Setup workflow
+        await app.setup_workflow(
+            workflow_and_activities_classes=[(HelloWorldWorkflow, HelloWorldActivities)]
+        )
+    
+        # Start workflow
+        workflow_response = await app.start_workflow(
+            workflow_args={"workflow_id": "hello-world"}, 
+            workflow_class=HelloWorldWorkflow
+        )
+    
+        # Start worker
+        await app.start_worker(daemon=daemon)
+    
+        return workflow_response
+    
+    
+    if __name__ == "__main__":
+        asyncio.run(application_hello_world(daemon=False))
+    ```
+  </Step>
 
-    1. Open `docs.json` in your editor.
-    2. Change the `"name"` field to your project name.
-    3. Update the `"colors"` to match your brand.
-    4. Save and see your changes instantly at `http://localhost:3000`.
+  <Step title="Run the application">
+    Run your application:
+    
+    ```bash
+    python hello_world.py
+    ```
+    
+    You should see log output indicating the workflow started and completed successfully:
+    
+    ```
+    INFO Starting application_hello_world
+    INFO Starting workflow execution
+    INFO Demo activity completed successfully
+    ```
+  </Step>
+</Steps>
 
-    <Tip>Try changing the primary color to see an immediate difference!</Tip>
-  </Accordion>
-</AccordionGroup>
+## Understanding the code
 
-### Step 3: Go live
+Let's break down the key components:
 
-<Accordion icon="rocket" title="Publish your docs">
-  1. Commit and push your changes.
-  2. Your docs will update and be live in moments!
-</Accordion>
+### Workflow
+
+The `HelloWorldWorkflow` class defines your workflow logic:
+
+```python
+@workflow.defn
+class HelloWorldWorkflow(WorkflowInterface):
+    @workflow.run
+    async def run(self, workflow_config: Dict[str, Any]) -> None:
+        # Workflow execution logic
+```
+
+- `@workflow.defn`: Marks this class as a Temporal workflow
+- `@workflow.run`: Defines the main workflow execution method
+- Workflows orchestrate activities and contain business logic
+
+### Activities
+
+The `HelloWorldActivities` class defines tasks that can be executed:
+
+```python
+class HelloWorldActivities(ActivitiesInterface):
+    @activity.defn
+    @auto_heartbeater
+    async def demo_activity(self, workflow_args: Dict[str, Any]) -> Dict[str, Any]:
+        return {"message": "Demo activity completed successfully"}
+```
+
+- `@activity.defn`: Marks this method as a Temporal activity
+- `@auto_heartbeater`: Automatically sends heartbeats to Temporal during execution
+- Activities contain the actual work (API calls, database queries, etc.)
+
+### Application
+
+The `BaseApplication` class manages the workflow lifecycle:
+
+```python
+app = BaseApplication(name=APPLICATION_NAME)
+
+await app.setup_workflow(
+    workflow_and_activities_classes=[(HelloWorldWorkflow, HelloWorldActivities)]
+)
+
+workflow_response = await app.start_workflow(
+    workflow_args={"workflow_id": "hello-world"}, 
+    workflow_class=HelloWorldWorkflow
+)
+
+await app.start_worker(daemon=daemon)
+```
+
+- `setup_workflow()`: Registers your workflow and activities with Temporal
+- `start_workflow()`: Initiates a workflow execution
+- `start_worker()`: Starts the worker that processes workflow tasks
 
 ## Next steps
 
-Now that you have your docs running, explore these key features:
-
 <CardGroup cols={2}>
-
-<Card title="Write Content" icon="pen-to-square" href="/essentials/markdown">
-  Learn MDX syntax and start writing your documentation.
-</Card>
-
-<Card title="Customize style" icon="palette" href="/essentials/settings">
-  Make your docs match your brand perfectly.
-</Card>
-
-<Card title="Add code examples" icon="square-code" href="/essentials/code">
-  Include syntax-highlighted code blocks.
-</Card>
-
-<Card title="API documentation" icon="code" href="/api-reference/introduction">
-  Auto-generate API docs from OpenAPI specs.
-</Card>
-
+  <Card title="Core concepts" icon="book" href="/concepts/application">
+    Learn about the BaseApplication, workflows, and activities in depth
+  </Card>
+  <Card title="SQL application" icon="database" href="/examples/sql-application">
+    Build a real-world application that extracts database metadata
+  </Card>
+  <Card title="Architecture" icon="diagram-project" href="/guides/architecture">
+    Understand how Temporal and Dapr power the SDK
+  </Card>
+  <Card title="API reference" icon="code" href="/api/overview">
+    Explore the complete API documentation
+  </Card>
 </CardGroup>
 
-<Note>
-  **Need help?** See our [full documentation](https://mintlify.com/docs) or join our [community](https://mintlify.com/community).
-</Note>
+## Troubleshooting
+
+<Accordion title="ImportError: No module named 'temporalio'">
+  Make sure you installed the SDK with the `workflows` extra:
+  
+  ```bash
+  pip install atlan-application-sdk[workflows]
+  ```
+</Accordion>
+
+<Accordion title="Connection errors">
+  The SDK requires a Temporal server to be running. For local development, you can:
+  
+  1. Use the provided Docker Compose setup in the repository
+  2. Install Temporal CLI and run `temporal server start-dev`
+</Accordion>
+
+<Accordion title="Python version errors">
+  The SDK requires Python 3.11 or higher. Check your version:
+  
+  ```bash
+  python --version
+  ```
+</Accordion>

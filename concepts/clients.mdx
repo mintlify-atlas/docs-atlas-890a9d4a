@@ -1,0 +1,567 @@
+---
+title: Clients
+description: Manage connections and HTTP requests to external systems
+---
+
+## Overview
+
+Clients in the Atlan Application SDK handle connection management and HTTP communication with external systems. They provide a clean abstraction for making API calls, handling authentication, and managing retries.
+
+<Note>
+  Clients focus on connection management and HTTP operations. Business logic should be implemented in [Handlers](/concepts/handlers).
+</Note>
+
+## ClientInterface
+
+The `ClientInterface` defines the base contract that all client implementations must follow.
+
+```python
+from abc import ABC, abstractmethod
+from typing import Any
+
+class ClientInterface(ABC):
+    """Base interface for implementing client connections."""
+    
+    @abstractmethod
+    async def load(self, *args: Any, **kwargs: Any) -> None:
+        """Establish the client connection."""
+        raise NotImplementedError("load method is not implemented")
+    
+    async def close(self, *args: Any, **kwargs: Any) -> None:
+        """Close the client connection."""
+        return
+```
+
+## BaseClient
+
+The `BaseClient` class provides a complete implementation for HTTP-based clients with built-in support for authentication, custom headers, and retry logic.
+
+```python
+from application_sdk.clients.base import BaseClient
+from typing import Dict, Any
+
+class MyClient(BaseClient):
+    async def load(self, **kwargs: Any) -> None:
+        credentials = kwargs.get("credentials", {})
+        
+        # Set up authentication headers
+        self.http_headers = {
+            "Authorization": f"Bearer {credentials.get('api_key')}",
+            "User-Agent": "MyApp/1.0"
+        }
+```
+
+### Constructor Parameters
+
+<ParamField path="credentials" type="Dict[str, Any]" default="{}">
+  Client credentials for authentication.
+</ParamField>
+
+<ParamField path="http_headers" type="HeaderTypes" default="{}">
+  HTTP headers for all requests. Supports dict, httpx Headers object, or list of tuples.
+  
+  ```python
+  # As dict
+  client = BaseClient(http_headers={"User-Agent": "MyApp"})
+  
+  # As Headers object
+  from httpx import Headers
+  client = BaseClient(http_headers=Headers({"User-Agent": "MyApp"}))
+  
+  # As list of tuples
+  client = BaseClient(http_headers=[("User-Agent", "MyApp")])
+  ```
+</ParamField>
+
+## Instance Attributes
+
+<ParamField path="http_headers" type="HeaderTypes">
+  HTTP headers applied to all requests. Set in the `load()` method.
+</ParamField>
+
+<ParamField path="http_retry_transport" type="httpx.AsyncBaseTransport">
+  HTTP transport layer for requests. Override in `load()` for custom retry behavior.
+  
+  Default: `httpx.AsyncHTTPTransport()` (no status code retries)
+</ParamField>
+
+<ParamField path="credentials" type="Dict[str, Any]">
+  Stored credentials for the client.
+</ParamField>
+
+## Required Methods
+
+### load()
+
+Initialize the client with credentials and set up authentication.
+
+```python
+async def load(self, **kwargs: Any) -> None:
+    """Initialize the client."""
+    credentials = kwargs.get("credentials", {})
+    
+    # Extract credentials
+    api_key = credentials.get("api_key")
+    if not api_key:
+        raise ValueError("API key is required")
+    
+    # Set up headers for all requests
+    self.http_headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json",
+        "User-Agent": "MyApp/1.0"
+    }
+    
+    # Store credentials for later use
+    self.credentials = credentials
+```
+
+<ParamField path="**kwargs" type="Any">
+  Keyword arguments typically including:
+  - `credentials` (Dict[str, Any]): Authentication credentials
+  - Configuration parameters for retry logic
+</ParamField>
+
+<Tip>
+  Always set `self.http_headers` in the `load()` method rather than the constructor. This ensures headers are properly configured with credentials.
+</Tip>
+
+## HTTP Request Methods
+
+### execute_http_get_request()
+
+Perform an HTTP GET request.
+
+```python
+response = await client.execute_http_get_request(
+    url="https://api.example.com/data",
+    headers={"Custom-Header": "value"},
+    params={"limit": 100, "offset": 0},
+    auth=("username", "password"),
+    timeout=30
+)
+
+if response and response.status_code == 200:
+    data = response.json()
+```
+
+<ParamField path="url" type="str" required>
+  The URL to make the GET request to.
+</ParamField>
+
+<ParamField path="headers" type="HeaderTypes">
+  Additional headers for this request. Merged with client-level headers.
+  
+  Supports dict, httpx Headers object, or list of tuples.
+</ParamField>
+
+<ParamField path="params" type="QueryParamTypes">
+  Query parameters. Supports dict, list of tuples, or string.
+  
+  ```python
+  # As dict
+  params={"key": "value", "limit": 100}
+  
+  # As list of tuples (for duplicate keys)
+  params=[("tag", "python"), ("tag", "api")]
+  
+  # As string
+  params="key=value&limit=100"
+  ```
+</ParamField>
+
+<ParamField path="auth" type="AuthTypes">
+  Authentication for the request. Supports:
+  - Tuple: `("username", "password")` for basic auth
+  - `httpx.BasicAuth`: `BasicAuth("username", "password")`
+  - `httpx.DigestAuth`: For digest authentication
+  - Custom auth classes
+  
+  ```python
+  from httpx import BasicAuth
+  
+  # Using tuple
+  auth=("user", "pass")
+  
+  # Using BasicAuth
+  auth=BasicAuth("user", "pass")
+  ```
+</ParamField>
+
+<ParamField path="timeout" type="int" default="10">
+  Request timeout in seconds.
+</ParamField>
+
+<ParamField path="return" type="Optional[httpx.Response]">
+  HTTP response object if successful, `None` if failed.
+</ParamField>
+
+### execute_http_post_request()
+
+Perform an HTTP POST request with support for JSON, form data, files, and raw content.
+
+```python
+# JSON request
+response = await client.execute_http_post_request(
+    url="https://api.example.com/data",
+    json_data={"name": "test", "value": 123},
+    headers={"Content-Type": "application/json"},
+    timeout=30
+)
+
+# Form data
+response = await client.execute_http_post_request(
+    url="https://api.example.com/form",
+    data={"field1": "value1", "field2": "value2"}
+)
+
+# File upload
+with open("file.txt", "rb") as f:
+    response = await client.execute_http_post_request(
+        url="https://api.example.com/upload",
+        files={"file": ("file.txt", f, "text/plain")},
+        data={"description": "My file"}
+    )
+```
+
+<ParamField path="url" type="str" required>
+  The URL to make the POST request to.
+</ParamField>
+
+<ParamField path="data" type="RequestData">
+  Form data to send in the request body. Supports dict, list of tuples, or other httpx-compatible formats.
+</ParamField>
+
+<ParamField path="json_data" type="Any">
+  JSON data to send in the request body. Any JSON-serializable object.
+</ParamField>
+
+<ParamField path="content" type="bytes">
+  Raw binary content to send in the request body.
+</ParamField>
+
+<ParamField path="files" type="RequestFiles">
+  Files to upload. Supports various formats:
+  
+  ```python
+  # Single file
+  files={"file": open("file.txt", "rb")}
+  
+  # With filename and content type
+  files={"file": ("file.txt", open("file.txt", "rb"), "text/plain")}
+  
+  # Multiple files
+  files={
+      "file1": open("file1.txt", "rb"),
+      "file2": open("file2.txt", "rb")
+  }
+  ```
+</ParamField>
+
+<ParamField path="headers" type="HeaderTypes">
+  Additional headers for this request. Merged with client-level headers.
+</ParamField>
+
+<ParamField path="params" type="QueryParamTypes">
+  Query parameters to include in the URL.
+</ParamField>
+
+<ParamField path="cookies" type="Dict[str, str]">
+  Cookies to include in the request.
+</ParamField>
+
+<ParamField path="auth" type="AuthTypes">
+  Authentication for the request. Same options as GET request.
+</ParamField>
+
+<ParamField path="follow_redirects" type="bool" default="True">
+  Whether to follow HTTP redirects.
+</ParamField>
+
+<ParamField path="verify" type="bool" default="True">
+  Whether to verify SSL certificates.
+</ParamField>
+
+<ParamField path="timeout" type="int" default="30">
+  Request timeout in seconds.
+</ParamField>
+
+<ParamField path="return" type="Optional[httpx.Response]">
+  HTTP response object if successful, `None` if failed.
+</ParamField>
+
+## Header Management
+
+The client supports a two-level header system:
+
+1. **Client-level headers**: Set in `load()` and applied to all requests
+2. **Method-level headers**: Passed to individual methods and merged with client headers
+
+```python
+class MyClient(BaseClient):
+    async def load(self, **kwargs):
+        # Client-level headers (all requests)
+        self.http_headers = {
+            "Authorization": f"Bearer {kwargs['api_key']}",
+            "User-Agent": "MyApp/1.0"
+        }
+
+# Method-level headers (specific request)
+response = await client.execute_http_get_request(
+    url="https://api.example.com/data",
+    headers={"X-Request-ID": "123"}  # Merged with client headers
+)
+```
+
+<Note>
+  Method-level headers override client-level headers for the same header name.
+</Note>
+
+## Advanced Retry Configuration
+
+For applications requiring advanced retry logic (status code-based retries, rate limiting, custom backoff), use the `httpx-retries` library:
+
+```python
+from application_sdk.clients.base import BaseClient
+from typing import Any
+
+class ResilientClient(BaseClient):
+    async def load(self, **kwargs: Any) -> None:
+        credentials = kwargs.get("credentials", {})
+        
+        # Set up headers
+        self.http_headers = {
+            "Authorization": f"Bearer {credentials['api_key']}"
+        }
+        
+        # Install httpx-retries: pip install httpx-retries
+        from httpx_retries import Retry, RetryTransport
+        
+        # Configure retry for status codes and network errors
+        retry = Retry(
+            total=5,  # Maximum retry attempts
+            backoff_factor=10,  # Exponential backoff multiplier
+            status_forcelist=[429, 500, 502, 503, 504],  # Retry these status codes
+            raise_on_status=False  # Don't raise on retry-able errors
+        )
+        
+        # Override transport with retry support
+        self.http_retry_transport = RetryTransport(retry=retry)
+```
+
+<ParamField path="total" type="int">
+  Maximum number of retry attempts.
+</ParamField>
+
+<ParamField path="backoff_factor" type="float">
+  Multiplier for exponential backoff between retries.
+  
+  Wait time = `backoff_factor * (2 ** retry_count)`
+</ParamField>
+
+<ParamField path="status_forcelist" type="List[int]">
+  HTTP status codes that should trigger a retry.
+  
+  Common codes:
+  - `429`: Too Many Requests (rate limiting)
+  - `500`: Internal Server Error
+  - `502`: Bad Gateway
+  - `503`: Service Unavailable
+  - `504`: Gateway Timeout
+</ParamField>
+
+<Warning>
+  The default `httpx.AsyncHTTPTransport()` only retries network-level errors (connection failures, timeouts). It does NOT retry based on HTTP status codes. For status code retries, you must use `httpx-retries` or a similar library.
+</Warning>
+
+## Complete Client Example
+
+```python
+from application_sdk.clients.base import BaseClient
+from application_sdk.observability.logger_adaptor import get_logger
+from typing import Dict, Any, List, Optional
+import httpx
+
+logger = get_logger(__name__)
+
+class DataAPIClient(BaseClient):
+    """Client for interacting with a data API."""
+    
+    def __init__(self):
+        super().__init__()
+        self.base_url = None
+    
+    async def load(self, **kwargs: Any) -> None:
+        """Initialize the client with credentials."""
+        credentials = kwargs.get("credentials", {})
+        
+        # Extract configuration
+        api_key = credentials.get("api_key")
+        self.base_url = credentials.get("base_url", "https://api.datasource.com")
+        
+        if not api_key:
+            raise ValueError("API key is required")
+        
+        # Set up authentication headers
+        self.http_headers = {
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json",
+            "User-Agent": "AtlanSDK/1.0"
+        }
+        
+        # Optional: Set up retry logic
+        if kwargs.get("enable_retries", True):
+            try:
+                from httpx_retries import Retry, RetryTransport
+                
+                retry = Retry(
+                    total=3,
+                    backoff_factor=5,
+                    status_forcelist=[429, 500, 502, 503, 504]
+                )
+                self.http_retry_transport = RetryTransport(retry=retry)
+                logger.info("Retry logic enabled")
+            except ImportError:
+                logger.warning("httpx-retries not installed, using default transport")
+        
+        logger.info(f"Client initialized for {self.base_url}")
+    
+    async def get_sources(self) -> List[Dict[str, Any]]:
+        """Fetch list of data sources."""
+        response = await self.execute_http_get_request(
+            url=f"{self.base_url}/v1/sources",
+            timeout=30
+        )
+        
+        if response and response.status_code == 200:
+            return response.json().get("sources", [])
+        
+        logger.error(f"Failed to fetch sources: {response.status_code if response else 'No response'}")
+        return []
+    
+    async def get_source_details(self, source_id: str) -> Optional[Dict[str, Any]]:
+        """Fetch details for a specific source."""
+        response = await self.execute_http_get_request(
+            url=f"{self.base_url}/v1/sources/{source_id}",
+            timeout=30
+        )
+        
+        if response and response.status_code == 200:
+            return response.json()
+        
+        return None
+    
+    async def query_data(self, source_id: str, query: str, params: Dict[str, Any] = None) -> List[Dict[str, Any]]:
+        """Execute a query against a data source."""
+        response = await self.execute_http_post_request(
+            url=f"{self.base_url}/v1/query",
+            json_data={
+                "source_id": source_id,
+                "query": query,
+                "parameters": params or {}
+            },
+            timeout=300  # Longer timeout for queries
+        )
+        
+        if response and response.status_code == 200:
+            return response.json().get("data", [])
+        
+        error_msg = f"Query failed: {response.status_code if response else 'No response'}"
+        logger.error(error_msg)
+        raise Exception(error_msg)
+    
+    async def upload_data(self, file_path: str, destination: str) -> Dict[str, Any]:
+        """Upload a data file."""
+        with open(file_path, "rb") as f:
+            response = await self.execute_http_post_request(
+                url=f"{self.base_url}/v1/upload",
+                files={"file": (file_path, f, "application/octet-stream")},
+                data={"destination": destination},
+                timeout=600  # Long timeout for uploads
+            )
+        
+        if response and response.status_code == 200:
+            return response.json()
+        
+        raise Exception(f"Upload failed: {response.status_code if response else 'No response'}")
+    
+    async def close(self) -> None:
+        """Clean up client resources."""
+        logger.info("Closing client connection")
+        # Perform any cleanup if needed
+```
+
+## Best Practices
+
+<Accordion title="Set Headers in load() Method">
+  Always configure `http_headers` in the `load()` method, not the constructor. This ensures credentials are properly loaded first.
+  
+  ```python
+  # ✅ Good
+  class GoodClient(BaseClient):
+      async def load(self, **kwargs):
+          self.http_headers = {"Authorization": f"Bearer {kwargs['api_key']}"}
+  
+  # ❌ Bad
+  class BadClient(BaseClient):
+      def __init__(self, api_key):
+          super().__init__()
+          self.http_headers = {"Authorization": f"Bearer {api_key}"}  # api_key might not be available yet
+  ```
+</Accordion>
+
+<Accordion title="Use Retry Logic for Production">
+  For production applications, configure retry logic to handle transient failures.
+  
+  ```python
+  from httpx_retries import Retry, RetryTransport
+  
+  async def load(self, **kwargs):
+      # ... headers setup ...
+      
+      retry = Retry(
+          total=5,
+          backoff_factor=10,
+          status_forcelist=[429, 500, 502, 503, 504]
+      )
+      self.http_retry_transport = RetryTransport(retry=retry)
+  ```
+</Accordion>
+
+<Accordion title="Handle Errors Gracefully">
+  Always check for `None` responses and handle errors appropriately.
+  
+  ```python
+  response = await self.client.execute_http_get_request(url)
+  
+  if response is None:
+      logger.error("Request failed: No response received")
+      return None
+  
+  if response.status_code != 200:
+      logger.error(f"Request failed: {response.status_code}")
+      return None
+  
+  return response.json()
+  ```
+</Accordion>
+
+<Accordion title="Use Appropriate Timeouts">
+  Set realistic timeouts based on the operation type.
+  
+  ```python
+  # Quick metadata request
+  await client.execute_http_get_request(url, timeout=10)
+  
+  # Long-running query
+  await client.execute_http_post_request(url, json_data=query, timeout=300)
+  
+  # Large file upload
+  await client.execute_http_post_request(url, files=files, timeout=600)
+  ```
+</Accordion>
+
+## Related Components
+
+- [Handlers](/concepts/handlers) - Use clients to implement business logic
+- [Activities](/concepts/activities) - Access handlers (which use clients) from workflows

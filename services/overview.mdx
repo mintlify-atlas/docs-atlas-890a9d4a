@@ -1,0 +1,148 @@
+---
+title: Services Overview
+description: Comprehensive guide to core services in the Atlan Application SDK
+icon: server
+---
+
+The Atlan Application SDK provides a suite of services that handle common infrastructure concerns for your applications. These services abstract away the complexity of working with distributed systems components like object storage, state management, secrets, and events.
+
+## Core Services
+
+The SDK includes the following services:
+
+<CardGroup cols={2}>
+  <Card title="StateStore" icon="database" href="/services/statestore">
+    Persistent state management for workflows and credentials with automatic synchronization to object storage.
+  </Card>
+  
+  <Card title="ObjectStore" icon="box" href="/services/objectstore">
+    Unified interface for file and directory operations across cloud storage providers via Dapr bindings.
+  </Card>
+  
+  <Card title="SecretStore" icon="key" href="/services/secretstore">
+    Secure secret management with automatic credential resolution and multi-provider support.
+  </Card>
+  
+  <Card title="EventStore" icon="bolt" href="/services/eventstore">
+    Event publishing with automatic metadata enrichment and lifecycle tracking.
+  </Card>
+  
+  <Card title="AtlanStorage" icon="cloud-arrow-up" href="/services/atlan-storage">
+    Migration utilities for moving data from local object storage to Atlan's upstream storage.
+  </Card>
+</CardGroup>
+
+## Common Patterns
+
+All services in the SDK follow consistent patterns:
+
+### Async/Await Support
+
+Most service methods are asynchronous and should be called with `await`:
+
+```python
+from application_sdk.services import StateStore, StateType
+
+# Async method calls
+state = await StateStore.get_state("workflow-123", StateType.WORKFLOWS)
+await StateStore.save_state("status", "completed", "workflow-123", StateType.WORKFLOWS)
+```
+
+### Error Handling
+
+Services raise appropriate exceptions that should be handled:
+
+```python
+from application_sdk.services import SecretStore
+from application_sdk.common.error_codes import CommonError
+
+try:
+    credentials = await SecretStore.get_credentials("db-cred-123")
+except CommonError as e:
+    logger.error(f"Failed to resolve credentials: {e}")
+```
+
+### Logging Integration
+
+All services use the SDK's logging infrastructure:
+
+```python
+from application_sdk.observability.logger_adaptor import get_logger
+
+logger = get_logger(__name__)
+
+# Services automatically log operations
+await ObjectStore.upload_file("/tmp/data.csv", "uploads/data.csv")
+# Logs: "Successfully uploaded file: uploads/data.csv"
+```
+
+## Service Dependencies
+
+Services are built on top of Dapr components:
+
+<AccordionGroup>
+  <Accordion title="StateStore" icon="database">
+    - **Depends on**: ObjectStore
+    - **Dapr Component**: Object store binding (configured via `UPSTREAM_OBJECT_STORE_NAME`)
+    - **Storage**: State files stored as JSON in object storage under `./local/tmp/persistent-artifacts/`
+  </Accordion>
+  
+  <Accordion title="ObjectStore" icon="box">
+    - **Depends on**: Dapr client
+    - **Dapr Components**: 
+      - `DEPLOYMENT_OBJECT_STORE_NAME` (local/deployment storage)
+      - `UPSTREAM_OBJECT_STORE_NAME` (upstream Atlan storage)
+    - **Supported Providers**: S3, Azure Blob, GCP Storage, or any Dapr-compatible binding
+  </Accordion>
+  
+  <Accordion title="SecretStore" icon="key">
+    - **Depends on**: StateStore, Dapr client
+    - **Dapr Components**:
+      - `SECRET_STORE_NAME` (application secrets)
+      - `DEPLOYMENT_SECRET_STORE_NAME` (deployment configuration)
+  </Accordion>
+  
+  <Accordion title="EventStore" icon="bolt">
+    - **Depends on**: Dapr client, AtlanAuthClient
+    - **Dapr Component**: Event store binding (configured via `EVENT_STORE_NAME`)
+    - **Features**: Automatic authentication header injection for HTTP bindings
+  </Accordion>
+  
+  <Accordion title="AtlanStorage" icon="cloud-arrow-up">
+    - **Depends on**: ObjectStore, Dapr client
+    - **Use Case**: Customer-deployed applications using bucket cloning strategy
+  </Accordion>
+</AccordionGroup>
+
+## Configuration
+
+Services are configured through environment variables and SDK constants:
+
+```python
+from application_sdk.constants import (
+    DEPLOYMENT_OBJECT_STORE_NAME,  # Default: "objectstore"
+    UPSTREAM_OBJECT_STORE_NAME,     # Default: "upstream-objectstore"
+    SECRET_STORE_NAME,              # Default: "secretstore"
+    EVENT_STORE_NAME,               # Default: "eventstore"
+    TEMPORARY_PATH,                 # Default: "./local/tmp"
+)
+```
+
+## Next Steps
+
+Explore each service in detail:
+
+<CardGroup cols={2}>
+  <Card title="StateStore" icon="database" href="/services/statestore">
+    Learn about persistent state management
+  </Card>
+  <Card title="ObjectStore" icon="box" href="/services/objectstore">
+    Master file and directory operations
+  </Card>
+  <Card title="SecretStore" icon="key" href="/services/secretstore">
+    Secure credential management
+  </Card>
+  <Card title="EventStore" icon="bolt" href="/services/eventstore">
+    Event publishing patterns
+  </Card>
+</CardGroup>

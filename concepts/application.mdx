@@ -1,0 +1,290 @@
+---
+title: Application
+description: Core orchestration class for managing workflows, workers, and servers in the Atlan Application SDK
+---
+
+## Overview
+
+The `BaseApplication` class is the central orchestration component of the Atlan Application SDK. It provides a standardized way to set up and run applications that use Temporal workflows, including automatic configuration of workflow clients, workers, and FastAPI servers.
+
+<Note>
+  The `BaseApplication` is designed to be used directly for most applications. For specialized use cases, you can subclass it to add custom functionality.
+</Note>
+
+## Key Features
+
+- **Unified Workflow Management**: Single interface for managing workflows, workers, and servers
+- **Multi-Mode Deployment**: Support for local development, worker-only, and server-only modes
+- **Event-Based Workflows**: Built-in support for event subscriptions and triggers
+- **MCP Integration**: Optional Model Context Protocol (MCP) server support
+- **Application Manifest**: Configuration-driven event registration
+
+## Initialization
+
+```python
+from application_sdk.application import BaseApplication
+from application_sdk.server import APIServer
+from my_app.client import MyClient
+from my_app.handler import MyHandler
+
+app = BaseApplication(
+    name="my-application",
+    server=APIServer(),
+    application_manifest=manifest_config,
+    client_class=MyClient,
+    handler_class=MyHandler
+)
+```
+
+### Constructor Parameters
+
+<ParamField path="name" type="str" required>
+  The name of the application. Used for workflow client identification and logging.
+</ParamField>
+
+<ParamField path="server" type="ServerInterface" default="None">
+  The server instance for the application. Typically an `APIServer` instance.
+</ParamField>
+
+<ParamField path="application_manifest" type="Dict[str, Any]" default="None">
+  Application manifest configuration containing event registration and other settings.
+  
+  ```python
+  application_manifest = {
+      "eventRegistration": {
+          "consumes": [
+              {
+                  "event_type": "ENTITY_UPDATE",
+                  "event_name": "asset_updated",
+                  "event_id": "asset_update_trigger",
+                  "filters": []
+              }
+          ]
+      }
+  }
+  ```
+</ParamField>
+
+<ParamField path="client_class" type="Type[BaseClient]" default="BaseClient">
+  Client class for the application. Must inherit from `BaseClient`.
+</ParamField>
+
+<ParamField path="handler_class" type="Type[BaseHandler]" default="BaseHandler">
+  Handler class for the application. Must inherit from `BaseHandler`.
+</ParamField>
+
+## Core Methods
+
+### setup_workflow()
+
+Set up the workflow client and initialize the worker with workflows and activities.
+
+```python
+await app.setup_workflow(
+    workflow_and_activities_classes=[
+        (MyWorkflow, MyActivities)
+    ],
+    passthrough_modules=["my_app", "pandas"],
+    activity_executor=ThreadPoolExecutor(max_workers=10)
+)
+```
+
+<ParamField path="workflow_and_activities_classes" type="List[Tuple[Type[WorkflowInterface], Type[ActivitiesInterface]]]" required>
+  List of tuples pairing workflow classes with their corresponding activities classes.
+</ParamField>
+
+<ParamField path="passthrough_modules" type="List[str]" default="[]">
+  List of module names to pass through to the worker sandbox. These modules will be accessible within workflows.
+</ParamField>
+
+<ParamField path="activity_executor" type="ThreadPoolExecutor" default="None">
+  Custom thread pool executor for running activities. If not provided, a default executor is created.
+</ParamField>
+
+### start()
+
+Start the application based on the configured `APPLICATION_MODE` environment variable.
+
+```python
+await app.start(
+    workflow_class=MyWorkflow,
+    ui_enabled=True,
+    has_configmap=False
+)
+```
+
+<ParamField path="workflow_class" type="Type[WorkflowInterface]" required>
+  The main workflow class to register with the server.
+</ParamField>
+
+<ParamField path="ui_enabled" type="bool" default="True">
+  Whether to enable the UI frontend routes.
+</ParamField>
+
+<ParamField path="has_configmap" type="bool" default="False">
+  Whether the application has a configuration map for the UI.
+</ParamField>
+
+<Tip>
+  The `start()` method automatically determines what to start based on `APPLICATION_MODE`:
+  - `LOCAL`: Starts worker in daemon mode + server (for development)
+  - `WORKER`: Starts only the worker (for production worker pods)
+  - `SERVER`: Starts only the server (for production API server pods)
+</Tip>
+
+### start_workflow()
+
+Manually start a new workflow execution.
+
+```python
+result = await app.start_workflow(
+    workflow_args={
+        "workflow_id": "my-workflow-123",
+        "metadata": {"key": "value"}
+    },
+    workflow_class=MyWorkflow
+)
+```
+
+<ParamField path="workflow_args" type="Dict[str, Any]" required>
+  Arguments to pass to the workflow execution.
+</ParamField>
+
+<ParamField path="workflow_class" type="Type[WorkflowInterface]" required>
+  The workflow class to execute.
+</ParamField>
+
+## Deployment Modes
+
+The SDK supports three deployment modes via the `APPLICATION_MODE` environment variable:
+
+<Accordion title="LOCAL Mode">
+  **Use case**: Local development
+  
+  Starts both the worker (in daemon mode) and the server in a single process. The worker runs in the background while the server handles API requests.
+  
+  ```bash
+  export APPLICATION_MODE=LOCAL
+  python main.py
+  ```
+</Accordion>
+
+<Accordion title="WORKER Mode">
+  **Use case**: Production worker pods
+  
+  Starts only the worker in non-daemon mode. This is the mode to use for dedicated worker containers in production.
+  
+  ```bash
+  export APPLICATION_MODE=WORKER
+  python main.py
+  ```
+</Accordion>
+
+<Accordion title="SERVER Mode">
+  **Use case**: Production API server pods
+  
+  Starts only the FastAPI server without a worker. Use this for API-only containers that trigger workflows but don't execute them.
+  
+  ```bash
+  export APPLICATION_MODE=SERVER
+  python main.py
+  ```
+</Accordion>
+
+## Event Registration
+
+Register event-based workflow triggers using the application manifest and registration API.
+
+```python
+# Define event subscription in manifest
+manifest = {
+    "eventRegistration": {
+        "consumes": [
+            {
+                "event_type": "ENTITY_UPDATE",
+                "event_name": "asset_updated",
+                "event_id": "asset_update_handler",
+                "filters": [
+                    {
+                        "path": "event.data.typeName",
+                        "operator": "==",
+                        "value": "Table"
+                    }
+                ]
+            }
+        ]
+    }
+}
+
+app = BaseApplication(
+    name="my-app",
+    application_manifest=manifest
+)
+
+# Register workflow for the event
+app.register_event_subscription(
+    event_id="asset_update_handler",
+    workflow_class=AssetUpdateWorkflow
+)
+```
+
+<Warning>
+  Event IDs must be unique across the application manifest. Duplicate event IDs will raise a `ValueError`.
+</Warning>
+
+## Complete Example
+
+```python
+import asyncio
+from application_sdk.application import BaseApplication
+from my_app.workflows import MyWorkflow
+from my_app.activities import MyActivities
+from my_app.handlers import MyHandler
+from my_app.clients import MyClient
+
+async def main():
+    # Initialize application
+    app = BaseApplication(
+        name="my-application",
+        client_class=MyClient,
+        handler_class=MyHandler
+    )
+    
+    # Set up workflows and activities
+    await app.setup_workflow(
+        workflow_and_activities_classes=[
+            (MyWorkflow, MyActivities)
+        ],
+        passthrough_modules=["my_app"]
+    )
+    
+    # Start the application (mode determined by APPLICATION_MODE env var)
+    await app.start(
+        workflow_class=MyWorkflow,
+        ui_enabled=True
+    )
+
+if __name__ == "__main__":
+    asyncio.run(main())
+```
+
+## Instance Attributes
+
+| Attribute | Type | Description |
+|-----------|------|-------------|
+| `application_name` | `str` | Name of the application |
+| `server` | `Optional[ServerInterface]` | Server instance for handling HTTP requests |
+| `worker` | `Optional[Worker]` | Worker instance for executing workflows |
+| `workflow_client` | `WorkflowClient` | Client for interacting with Temporal |
+| `application_manifest` | `Optional[Dict[str, Any]]` | Application configuration manifest |
+| `event_subscriptions` | `Dict[str, EventWorkflowTrigger]` | Registered event subscriptions |
+| `client_class` | `Type[BaseClient]` | Client class for the application |
+| `handler_class` | `Type[BaseHandler]` | Handler class for the application |
+| `mcp_server` | `Optional[MCPServer]` | MCP server instance (if MCP is enabled) |
+
+## Related Components
+
+- [Workflows](/concepts/workflows) - Define workflow logic
+- [Activities](/concepts/activities) - Implement workflow tasks
+- [Workers](/concepts/worker) - Execute workflows and activities
+- [Server](/concepts/server) - Handle API requests

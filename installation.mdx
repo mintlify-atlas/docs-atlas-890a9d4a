@@ -1,0 +1,207 @@
+---
+title: Installation
+description: Install the Atlan Application SDK with pip, uv, or poetry
+---
+
+# Installation
+
+The Atlan Application SDK is available on [PyPI](https://pypi.org/project/atlan-application-sdk/) and can be installed with your preferred Python package manager.
+
+## Requirements
+
+<Note>
+  **Python 3.11 or higher** is required. The SDK supports Python 3.11, 3.12, and 3.13.
+</Note>
+
+## Install the SDK
+
+<CodeGroup>
+```bash pip
+pip install atlan-application-sdk
+```
+
+```bash uv
+uv add atlan-application-sdk
+```
+
+```bash poetry
+poetry add atlan-application-sdk
+```
+</CodeGroup>
+
+This installs the core SDK with essential dependencies including:
+
+- FastAPI for the web server
+- Pydantic for data validation
+- PyAtlan for Atlan API access
+- DuckDB for local data processing
+- Loguru for logging
+
+## Optional dependencies
+
+The SDK provides optional extras for specific functionality:
+
+### Workflow orchestration
+
+Required for Temporal workflow support:
+
+<CodeGroup>
+```bash pip
+pip install atlan-application-sdk[workflows]
+```
+
+```bash uv
+uv add atlan-application-sdk --extra workflows
+```
+
+```bash poetry
+poetry add atlan-application-sdk -E workflows
+```
+</CodeGroup>
+
+Includes:
+- Temporal Python SDK
+- Dapr SDK
+- orjson for fast JSON serialization
+
+### SQL database support
+
+For SQLAlchemy-based database connections:
+
+<CodeGroup>
+```bash pip
+pip install atlan-application-sdk[sqlalchemy]
+```
+
+```bash uv
+uv add atlan-application-sdk --extra sqlalchemy
+```
+
+```bash poetry
+poetry add atlan-application-sdk -E sqlalchemy
+```
+</CodeGroup>
+
+### Cloud provider support
+
+<Tabs>
+  <Tab title="AWS">
+    For AWS IAM authentication and Secrets Manager:
+    
+    ```bash
+    pip install atlan-application-sdk[iam_auth]
+    ```
+    
+    Includes boto3 for AWS SDK access.
+  </Tab>
+  
+  <Tab title="Azure">
+    For Azure authentication and storage:
+    
+    ```bash
+    pip install atlan-application-sdk[azure]
+    ```
+    
+    Includes Azure Identity and Storage SDKs.
+  </Tab>
+</Tabs>
+
+### Data processing
+
+<Accordion title="Pandas (included by default)">
+  Pandas and PyArrow are included in the base installation for data processing.
+</Accordion>
+
+<Accordion title="Daft (advanced)">
+  For distributed data processing with Daft:
+  
+  ```bash
+  pip install atlan-application-sdk[daft]
+  ```
+</Accordion>
+
+### Development and testing
+
+<Accordion title="Testing utilities">
+  For test utilities and validation:
+  
+  ```bash
+  pip install atlan-application-sdk[tests]
+  ```
+  
+  Includes pytest-order and pandera for data validation.
+</Accordion>
+
+<Accordion title="Distributed locking">
+  For Redis-based distributed locks:
+  
+  ```bash
+  pip install atlan-application-sdk[distributed_lock]
+  ```
+</Accordion>
+
+<Accordion title="MCP support">
+  For Model Context Protocol integration:
+  
+  ```bash
+  pip install atlan-application-sdk[mcp]
+  ```
+</Accordion>
+
+## Install all extras
+
+To install the SDK with all optional dependencies:
+
+<CodeGroup>
+```bash pip
+pip install atlan-application-sdk[workflows,sqlalchemy,iam_auth,azure,daft,tests,distributed_lock,mcp]
+```
+
+```bash uv
+uv add atlan-application-sdk --all-extras
+```
+
+```bash poetry
+poetry add atlan-application-sdk --all-extras
+```
+</CodeGroup>
+
+## Docker images
+
+Pre-built Docker images are available from the Atlan Harbor registry:
+
+```bash
+# Latest version
+docker pull registry.atlan.com/public/application-sdk:main-latest
+
+# Specific version
+docker pull registry.atlan.com/public/application-sdk:main-2.5.0
+
+# Commit-specific image
+docker pull registry.atlan.com/public/application-sdk:sha-49c027f
+```
+
+<Tip>
+  Docker images include all dependencies and are ready for production deployment.
+</Tip>
+
+## Verify installation
+
+Verify the installation by checking the version:
+
+```python
+from application_sdk import __version__
+
+print(__version__)  # Should print: 2.5.0
+```
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Quickstart" icon="rocket" href="/quickstart">
+    Build your first application
+  </Card>
+  <Card title="Core concepts" icon="book" href="/concepts/application">
+    Learn the fundamentals
+  </Card>
+</CardGroup>

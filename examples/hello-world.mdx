@@ -1,0 +1,194 @@
+---
+title: "Hello World"
+description: "A minimal example demonstrating the basics of building an application with the Atlan SDK and Temporal workflows"
+---
+
+## Overview
+
+This example demonstrates the simplest possible application using the Atlan Application SDK. It shows how to:
+
+- Define a Temporal workflow
+- Create an activity with automatic heartbeating
+- Initialize and run an application
+- Start a workflow and worker
+
+This is the perfect starting point for understanding the SDK's core concepts.
+
+## What You'll Build
+
+A minimal application that:
+1. Defines a workflow called `HelloWorldWorkflow`
+2. Creates a single activity that returns a success message
+3. Executes the workflow using the Temporal workflow engine
+
+<Note>
+This example uses `daemon=False` to keep the worker running in the foreground. In production, you'd typically use `daemon=True` and run the worker as a background service.
+</Note>
+
+## Complete Code
+
+```python application_hello_world.py
+import asyncio
+from datetime import timedelta
+from typing import Any, Callable, Dict, Sequence, cast
+
+from temporalio import activity, workflow
+
+from application_sdk.activities import ActivitiesInterface
+from application_sdk.activities.common.utils import auto_heartbeater
+from application_sdk.application import BaseApplication
+from application_sdk.observability.logger_adaptor import get_logger
+from application_sdk.workflows import WorkflowInterface
+
+APPLICATION_NAME = "hello-world"
+
+logger = get_logger(__name__)
+
+
+@workflow.defn
+class HelloWorldWorkflow(WorkflowInterface):
+    @workflow.run
+    async def run(self, workflow_config: Dict[str, Any]) -> None:
+        activities = HelloWorldActivities()
+
+        await workflow.execute_activity_method(
+            activities.demo_activity,
+            args=[workflow_config],
+            start_to_close_timeout=timedelta(seconds=10),
+            heartbeat_timeout=timedelta(seconds=10),
+        )
+
+    @staticmethod
+    def get_activities(activities: ActivitiesInterface) -> Sequence[Callable[..., Any]]:
+        activities = cast(HelloWorldActivities, activities)
+        return [
+            activities.demo_activity,
+        ]
+
+
+class HelloWorldActivities(ActivitiesInterface):
+    @activity.defn
+    @auto_heartbeater
+    async def demo_activity(self, workflow_args: Dict[str, Any]) -> Dict[str, Any]:
+        return {"message": "Demo activity completed successfully"}
+
+
+async def application_hello_world(daemon: bool = True) -> Dict[str, Any]:
+    logger.info("Starting application_hello_world")
+
+    # initialize application
+    app = BaseApplication(name=APPLICATION_NAME)
+
+    # setup workflow
+    await app.setup_workflow(
+        workflow_and_activities_classes=[(HelloWorldWorkflow, HelloWorldActivities)]
+    )
+
+    # start workflow
+    workflow_response = await app.start_workflow(
+        workflow_args={"workflow_id": "hello-world"}, workflow_class=HelloWorldWorkflow
+    )
+
+    # start worker
+    await app.start_worker(daemon=daemon)
+
+    return workflow_response
+
+
+if __name__ == "__main__":
+    asyncio.run(application_hello_world(daemon=False))
+```
+
+## How to Run
+
+<Steps>
+  <Step title="Start Dependencies">
+    Start the Dapr runtime and Temporal server:
+    
+    ```bash
+    uv run poe start-deps
+    ```
+  </Step>
+
+  <Step title="Run the Example">
+    Execute the hello world application:
+    
+    ```bash
+    uv run examples/application_hello_world.py
+    ```
+  </Step>
+
+  <Step title="Verify Output">
+    You should see logs indicating:
+    - Application initialization
+    - Workflow setup
+    - Workflow execution
+    - Activity completion with the success message
+  </Step>
+</Steps>
+
+## Key Components Explained
+
+### Workflow Definition
+
+```python
+@workflow.defn
+class HelloWorldWorkflow(WorkflowInterface):
+    @workflow.run
+    async def run(self, workflow_config: Dict[str, Any]) -> None:
+        # Workflow logic here
+```
+
+The `@workflow.defn` decorator marks this class as a Temporal workflow. The `run` method contains the workflow logic that will be executed.
+
+### Activity Definition
+
+```python
+@activity.defn
+@auto_heartbeater
+async def demo_activity(self, workflow_args: Dict[str, Any]) -> Dict[str, Any]:
+    return {"message": "Demo activity completed successfully"}
+```
+
+- `@activity.defn`: Marks this as a Temporal activity
+- `@auto_heartbeater`: Automatically sends heartbeats to Temporal to indicate the activity is still running
+
+### Application Initialization
+
+```python
+app = BaseApplication(name=APPLICATION_NAME)
+await app.setup_workflow(
+    workflow_and_activities_classes=[(HelloWorldWorkflow, HelloWorldActivities)]
+)
+```
+
+The `BaseApplication` class provides the foundation for all Atlan applications. You must register your workflow and activity classes during setup.
+
+### Starting the Workflow
+
+```python
+workflow_response = await app.start_workflow(
+    workflow_args={"workflow_id": "hello-world"}, 
+    workflow_class=HelloWorldWorkflow
+)
+```
+
+This initiates the workflow execution. The `workflow_args` are passed to the workflow's `run` method.
+
+### Starting the Worker
+
+```python
+await app.start_worker(daemon=daemon)
+```
+
+The worker processes workflow and activity tasks. Setting `daemon=False` keeps it running in the foreground.
+
+<Tip>
+Once you understand this basic example, move on to the [SQL Application](/examples/sql-application) example to see how to build a real metadata extraction workflow.
+</Tip>
+
+## Next Steps
+
+- Learn about [SQL metadata extraction](/examples/sql-application)
+- Explore [custom transformers](/examples/sql-with-transformers)
+- Build [custom FastAPI servers](/examples/custom-fastapi)

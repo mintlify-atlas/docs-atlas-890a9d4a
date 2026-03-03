@@ -1,0 +1,214 @@
+---
+title: Architecture
+description: Understanding the core architecture of the Atlan Application SDK
+icon: sitemap
+---
+
+The Atlan Application SDK uses two powerful tools to provide a Platform-as-a-Service (PaaS) interface on the Atlan Platform, enabling you to build resilient, scalable applications.
+
+<CardGroup cols={2}>
+  <Card title="Dapr" icon="cube" href="https://dapr.io/">
+    A portable, event-driven runtime for building resilient microservice applications
+  </Card>
+  <Card title="Temporal" icon="clock" href="https://docs.temporal.io/">
+    A microservices orchestration platform for scalable and reliable workflows
+  </Card>
+</CardGroup>
+
+## How They Work Together
+
+<Steps>
+  <Step title="Infrastructure Abstraction with Dapr">
+    Dapr provides building blocks that abstract the underlying infrastructure, making it easy to work with state stores, pub/sub messaging, service invocation, and more without worrying about implementation details.
+  </Step>
+  
+  <Step title="Workflow Orchestration with Temporal">
+    Temporal schedules and executes workflows in a fault-tolerant way, handling retries, timeouts, and distributed coordination automatically.
+  </Step>
+  
+  <Step title="Seamless Integration">
+    The SDK combines both tools to give you the best of both worlds: infrastructure flexibility and workflow reliability.
+  </Step>
+</Steps>
+
+<Tip>
+New to these technologies? Check out these quick tutorials:
+- [Dapr Hello World](https://github.com/dapr/quickstarts/blob/master/tutorials/hello-world/README.md)
+- [Temporal Hello World in Python](https://learn.temporal.io/getting_started/python/hello_world_in_python/)
+</Tip>
+
+## Package Structure
+
+The `application_sdk` package is organized into focused modules with clear separation of concerns:
+
+### Core Application Components
+
+<AccordionGroup>
+  <Accordion title="application/" icon="gear">
+    Core application functionality and base classes for building your applications.
+  </Accordion>
+  
+  <Accordion title="worker.py" icon="users">
+    Manages Temporal workflow workers and their execution. Workers are responsible for picking up and executing workflows and activities.
+  </Accordion>
+</AccordionGroup>
+
+### Infrastructure and Clients
+
+<AccordionGroup>
+  <Accordion title="clients/" icon="plug">
+    Client implementations for various services including SQL databases, object stores, and external APIs.
+  </Accordion>
+  
+  <Accordion title="common/" icon="box">
+    Shared utilities and common functionality used across the SDK.
+  </Accordion>
+</AccordionGroup>
+
+### Workflow and Activity Management
+
+<AccordionGroup>
+  <Accordion title="workflows/" icon="diagram-project">
+    Workflow definitions and implementations. Workflows orchestrate the overall business logic.
+  </Accordion>
+  
+  <Accordion title="activities/" icon="bolt">
+    Activity definitions and implementations. Activities are the individual units of work executed by workflows.
+  </Accordion>
+  
+  <Accordion title="handlers/" icon="wand-magic-sparkles">
+    Event and request handlers for processing various types of requests.
+  </Accordion>
+</AccordionGroup>
+
+### Data Processing and Transformation
+
+<AccordionGroup>
+  <Accordion title="transformers/" icon="arrow-right-arrow-left">
+    Data transformation utilities for converting between different formats (e.g., raw metadata to Atlas entities).
+  </Accordion>
+  
+  <Accordion title="inputs/" icon="arrow-down-to-line">
+    Input processing and validation to ensure data quality before processing.
+  </Accordion>
+  
+  <Accordion title="outputs/" icon="arrow-up-from-line">
+    Output formatting and handling for preparing results for storage or transmission.
+  </Accordion>
+</AccordionGroup>
+
+### Documentation and Testing
+
+<AccordionGroup>
+  <Accordion title="docgen/" icon="book">
+    Documentation generation tools for creating API documentation.
+  </Accordion>
+  
+  <Accordion title="test_utils/" icon="flask">
+    Testing utilities and helpers for writing comprehensive tests.
+  </Accordion>
+</AccordionGroup>
+
+## Key Capabilities
+
+The SDK provides comprehensive features for building production-ready applications:
+
+<CardGroup cols={2}>
+  <Card title="Workflow Management" icon="diagram-project">
+    Orchestrate complex business logic through Temporal workflows with automatic retries and fault tolerance.
+  </Card>
+  
+  <Card title="Activity Execution" icon="bolt">
+    Execute and coordinate individual units of work with proper error handling and monitoring.
+  </Card>
+  
+  <Card title="Service Clients" icon="plug">
+    Ready-to-use client implementations for databases, object stores, and external services.
+  </Card>
+  
+  <Card title="Data Transformation" icon="arrow-right-arrow-left">
+    Transform data between formats with built-in transformers and the ability to create custom ones.
+  </Card>
+  
+  <Card title="Documentation Generation" icon="book">
+    Automatically generate API documentation for your applications.
+  </Card>
+  
+  <Card title="Testing Utilities" icon="flask">
+    Comprehensive testing framework for end-to-end and unit tests.
+  </Card>
+</CardGroup>
+
+## Architecture Design Principles
+
+The SDK follows a modular design with several key principles:
+
+<Steps>
+  <Step title="Separation of Concerns">
+    Core application logic is isolated from infrastructure concerns, making it easier to test and maintain.
+  </Step>
+  
+  <Step title="Modular Components">
+    Workflow and activity management are separated, allowing you to reuse activities across different workflows.
+  </Step>
+  
+  <Step title="Centralized Utilities">
+    Common functionality is centralized in the `common` module, reducing duplication.
+  </Step>
+  
+  <Step title="Dedicated Data Processing">
+    Data transformation is handled through dedicated transformers, keeping conversion logic separate from business logic.
+  </Step>
+</Steps>
+
+### Benefits of This Design
+
+<CardGroup cols={3}>
+  <Card title="Easy Extension" icon="puzzle-piece">
+    Add new functionality without modifying existing code.
+  </Card>
+  
+  <Card title="Clear Boundaries" icon="border-all">
+    Well-defined module responsibilities make the codebase easier to navigate.
+  </Card>
+  
+  <Card title="Testable" icon="vial">
+    Modular design enables focused unit tests and integration tests.
+  </Card>
+  
+  <Card title="Flexible Workflows" icon="code-branch">
+    Compose workflows from reusable activities and handlers.
+  </Card>
+  
+  <Card title="Efficient Processing" icon="gauge-high">
+    Optimized data transformation pipeline for handling large datasets.
+  </Card>
+  
+  <Card title="Scalable" icon="arrows-up-to-line">
+    Leverage Temporal's scalability for handling high workloads.
+  </Card>
+</CardGroup>
+
+<Note>
+The SDK is designed for building scalable, reliable applications on the Atlan Platform, combining Dapr's infrastructure abstraction with Temporal's workflow orchestration.
+</Note>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Build SQL Applications" icon="database" href="/guides/sql-applications">
+    Learn how to build applications that extract metadata from SQL databases.
+  </Card>
+  
+  <Card title="Testing Framework" icon="flask" href="/guides/testing">
+    Explore the testing framework for writing comprehensive tests.
+  </Card>
+  
+  <Card title="Best Practices" icon="star" href="/guides/best-practices">
+    Follow best practices for scalability, reliability, and performance.
+  </Card>
+  
+  <Card title="Secret Stores" icon="key" href="/guides/secret-stores">
+    Learn how to securely manage credentials with secret stores.
+  </Card>
+</CardGroup>
