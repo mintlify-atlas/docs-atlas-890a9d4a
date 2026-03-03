@@ -1,0 +1,154 @@
+{
+  "projectType": "sdk-library",
+  "projectName": "Atlan Application SDK",
+  "projectDescription": "Python library for building resilient applications on the Atlan platform with Temporal workflows and Dapr infrastructure",
+  "theme": "palm",
+  "primaryColor": "#4945FF",
+  "lightColor": "#7C7AFF",
+  "darkColor": "#3733E5",
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Get Started",
+            "pages": [
+              "introduction",
+              "installation",
+              "quickstart"
+            ]
+          },
+          {
+            "group": "Core Concepts",
+            "pages": [
+              "concepts/application",
+              "concepts/workflows",
+              "concepts/activities",
+              "concepts/handlers",
+              "concepts/clients",
+              "concepts/server",
+              "concepts/worker"
+            ]
+          },
+          {
+            "group": "Guides",
+            "pages": [
+              "guides/architecture",
+              "guides/sql-applications",
+              "guides/testing",
+              "guides/best-practices",
+              "guides/secret-stores"
+            ]
+          },
+          {
+            "group": "Services",
+            "pages": [
+              "services/overview",
+              "services/statestore",
+              "services/objectstore",
+              "services/secretstore",
+              "services/eventstore",
+              "services/atlan-storage"
+            ]
+          },
+          {
+            "group": "Advanced",
+            "pages": [
+              "advanced/mcp-integration",
+              "advanced/monitoring",
+              "advanced/temporal-auth",
+              "advanced/inputs-outputs"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "API Reference",
+        "groups": [
+          {
+            "group": "Overview",
+            "pages": [
+              "api/overview"
+            ]
+          },
+          {
+            "group": "Core Modules",
+            "pages": [
+              "api/application",
+              "api/workflows",
+              "api/activities",
+              "api/handlers",
+              "api/clients"
+            ]
+          },
+          {
+            "group": "Services",
+            "pages": [
+              "api/services/statestore",
+              "api/services/objectstore",
+              "api/services/secretstore",
+              "api/services/eventstore",
+              "api/services/atlan-storage"
+            ]
+          },
+          {
+            "group": "Data & I/O",
+            "pages": [
+              "api/io",
+              "api/transformers"
+            ]
+          },
+          {
+            "group": "Utilities",
+            "pages": [
+              "api/decorators",
+              "api/observability",
+              "api/test-utils"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "Examples",
+        "groups": [
+          {
+            "group": "Example Applications",
+            "pages": [
+              "examples/hello-world",
+              "examples/sql-application",
+              "examples/sql-with-transformers",
+              "examples/custom-fastapi"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "keyFeatures": [
+    "Temporal workflow orchestration",
+    "Dapr infrastructure abstraction",
+    "SQL data extraction and processing",
+    "State and object storage services",
+    "FastAPI server integration",
+    "Built-in observability and monitoring",
+    "Extensible handler and client system",
+    "MCP (Model Context Protocol) support"
+  ],
+  "publicApiSurface": [
+    "BaseApplication",
+    "WorkflowInterface",
+    "ActivitiesInterface",
+    "HandlerInterface",
+    "ClientInterface",
+    "StateStore",
+    "ObjectStore",
+    "SecretStore",
+    "EventStore",
+    "AtlanStorage",
+    "APIServer",
+    "Worker",
+    "observability decorator",
+    "auto_heartbeater decorator"
+  ]
+}
